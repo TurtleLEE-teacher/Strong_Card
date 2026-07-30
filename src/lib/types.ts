@@ -199,6 +199,24 @@ export interface BenefitRule {
   minAmountPerTx?: number;
   /** 건당 혜택 한도 */
   capPerTx?: number;
+  /**
+   * 요율을 적용할 **할인 전 이용금액**의 상한.
+   *
+   * capPerTx와 다르다. capPerTx는 "할인액 N원까지", 이 값은 "이용금액 N원까지".
+   * 평상시에는 둘이 같은 결과를 내지만(1만원 × 10% = 1,000원), 요율이 바뀌는
+   * 순간 갈라진다. 신한 Discount Plan 약관은 "할인 전 이용금액 1회 1만원까지"로
+   * 쓰여 있으므로 이쪽이 원문에 맞고, Plan Day로 요율이 2배가 되면 할인액
+   * 상한도 함께 2배가 된다.
+   */
+  maxEligibleAmountPerTx?: number;
+  /**
+   * 매월 특정 일자에 요율을 배수만큼 올리는 보너스.
+   *
+   * 신한 Discount Plan의 **Plan Day** — 매월 1일, Time Plan·Daily Plan
+   * 각 서비스의 **첫 할인 거래 1건**에만 요율 2배. capGroup 단위로 1회씩
+   * 소진되며, 기존 월 한도·일월 횟수 한도 안에서 제공된다.
+   */
+  bonusDay?: { dayOfMonth: number; multiplier: number };
   /** 월 혜택 한도. 구간에 따라 달라지면 TierCap[]. null/undefined면 무제한. */
   capPerMonth?: number | TierCap[] | null;
   /** 이 룰이 유효한 시작일 (YYYY-MM-DD, 포함) */

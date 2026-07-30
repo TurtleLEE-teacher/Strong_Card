@@ -210,8 +210,14 @@ export function estimateBenefit(
   }
 
   const gross = Math.floor(query.amount * rule.rate);
-  let amount = gross;
-  let cappedBy: Recommendation['cappedBy'] = 'none';
+  // '할인 전 이용금액' 상한. 추천도 원장과 같은 식으로 깎아야 화면 두 곳이
+  // 서로 다른 금액을 말하지 않는다.
+  const eligibleAmount =
+    rule.maxEligibleAmountPerTx !== undefined
+      ? Math.min(query.amount, rule.maxEligibleAmountPerTx)
+      : query.amount;
+  let amount = Math.floor(eligibleAmount * rule.rate);
+  let cappedBy: Recommendation['cappedBy'] = amount < gross ? 'per-tx' : 'none';
 
   if (rule.capPerTx !== undefined && amount > rule.capPerTx) {
     amount = rule.capPerTx;

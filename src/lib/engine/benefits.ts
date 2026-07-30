@@ -26,6 +26,7 @@ import {
   isRuleEffective,
   isRuleEffectiveInMonth,
   isWithinHours,
+  kstDayOfMonth,
   kstDayOfWeek,
   toKstDateString,
   type MonthKey,
@@ -228,6 +229,8 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
   // capGroup이 있으면 그 키로 한도를 공유한다. 없으면 룰 하나가 곧 한 그룹.
   const monthlyUsed = new Map<string, number>();
   const txCount = new Map<string, number>();
+  /** Plan Day 보너스를 이미 쓴 capGroup. 그룹당 월 1회. */
+  const bonusDayUsed = new Set<string>();
   const counters = new UsageCounters();
   const appliedBenefits: AppliedBenefit[] = [];
   const unmatchedTransactionIds: string[] = [];
@@ -255,9 +258,27 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
     const capKey = rule.capGroup ?? rule.id;
     const used = monthlyUsed.get(capKey) ?? 0;
 
-    let amount = Math.floor(tx.krwAmount * rule.rate);
-    const gross = amount;
-    let cappedBy: AppliedBenefit['cappedBy'] = 'none';
+    // Plan Day: 매월 1일, 그룹별 첫 **할인** 거래에만 요율 배수를 적용한다.
+    // 실제로 할인이 붙은 뒤에 소진 처리해야 한도에 걸려 0원이 된 거래가
+    // 보너스를 헛되이 태우지 않는다.
+    const bonusEligible =
+      rule.bonusDay !== undefined &&
+      kstDayOfMonth(tx.approvedAt) === rule.bonusDay.dayOfMonth &&
+      !bonusDayUsed.has(capKey);
+    const rate = bonusEligible ? rule.rate * rule.bonusDay!.multiplier : rule.rate;
+
+    // 요율은 '할인 전 이용금액' 상한까지만 걸린다. 상한을 할인액이 아니라
+    // 이용금액에 두어야 Plan Day로 요율이 2배가 될 때 상한도 함께 2배가 된다.
+    const eligibleAmount =
+      rule.maxEligibleAmountPerTx !== undefined
+        ? Math.min(tx.krwAmount, rule.maxEligibleAmountPerTx)
+        : tx.krwAmount;
+
+    // gross는 상한이 하나도 없었다면 받았을 금액이다. 이 값을 기준으로 해야
+    // cappedAmount가 "한도 때문에 못 받은 금액"이라는 뜻을 유지한다.
+    const gross = Math.floor(tx.krwAmount * rate);
+    let amount = Math.floor(eligibleAmount * rate);
+    let cappedBy: AppliedBenefit['cappedBy'] = amount < gross ? 'per-tx' : 'none';
 
     // 1. 건당 한도
     if (rule.capPerTx !== undefined && amount > rule.capPerTx) {
@@ -282,6 +303,10 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
         cappedBy = 'total';
       }
     }
+
+    // 실제로 할인이 붙었을 때만 보너스를 소진한다. 약관의 "첫 번째 **할인**
+    // 거래"가 그 뜻이다 — 한도에 걸려 0원이 된 거래는 할인 거래가 아니다.
+    if (bonusEligible && amount > 0) bonusDayUsed.add(capKey);
 
     monthlyUsed.set(capKey, used + amount);
     txCount.set(rule.id, (txCount.get(rule.id) ?? 0) + 1);

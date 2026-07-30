@@ -26,10 +26,14 @@ import { COMMON_EXCLUSIONS } from '../exclusions';
  *                영역별 일 1회 월 5회, 할인 전 이용금액 1회 5만원까지
  *   Monthly Plan 공과금 10% / 디지털구독·멤버십 20% / 영화예매 5천원(월 1회)
  *
- * ⚠️ 모델링하지 않은 것: **Plan Day** (매월 1일 첫 거래 할인율 2배).
- *    Time Plan·Daily Plan 각 1회씩 적용되며 기존 한도·횟수 안에서 제공된다.
- *    영역별 일 횟수까지 공유해야 정확한데 그 표현이 엔진에 없다. 잘못 넣으면
- *    과다 계상되므로 아예 빼뒀다 — 매월 1일에 실제보다 조금 적게 나온다.
+ * Plan Day  매월 1일, Time Plan·Daily Plan **각 서비스의 첫 할인 거래 1건**에
+ *           할인율 2배 (서비스당 1회, 최대 2회). 기존 월 한도와 일/월 횟수
+ *           한도 안에서 제공되며, 승인 시각 기준 1일 23:59:59까지.
+ *
+ *           약관이 "할인 전 이용금액 1회 N원까지"로 쓰여 있어 건당 상한을
+ *           할인액(capPerTx)이 아니라 이용금액(maxEligibleAmountPerTx)에 건다.
+ *           평상시 결과는 같지만(1만원 × 10% = 1,000원), Plan Day로 요율이
+ *           2배가 되면 할인액 상한도 2배가 되어야 약관과 맞는다.
  *
  * 출처: 신한카드 공식 상품 안내 (사용자 제공 전문)
  * https://www.shinhancard.com/pconts/html/card/apply/credit/1232369_2207.html
@@ -63,6 +67,12 @@ const CINEMA_CAP: TierCap[] = [
   { threshold: 800_000, cap: 5_000 },
   { threshold: 1_200_000, cap: 5_000 },
 ];
+
+/**
+ * Plan Day — 매월 1일 요율 2배. capGroup(=서비스)마다 첫 할인 거래 1건에만
+ * 붙으므로 Time Plan·Daily Plan 각 1회씩, 월 최대 2회 적용된다.
+ */
+const PLAN_DAY = { dayOfMonth: 1, multiplier: 2 } as const;
 
 const TIME = 'dp-time';
 const DAILY = 'dp-daily';
@@ -126,7 +136,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       // 지정 6개 브랜드만. 일반 카페 브랜드를 넣으면 과다 계상된다.
       match: { brands: [...BRAND_GROUPS.DP_CAFE] },
       timeWindow: { startHour: 7, endHour: 15, label: '07~15시' },
-      capPerTx: 1_000,
+      maxEligibleAmountPerTx: 10_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: TIME_PLAN_CAP,
       capGroup: TIME,
       capGroupLabel: 'Time Plan (카페·음식점·편의점·배달앱 10%)',
@@ -142,7 +153,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       rate: 0.1,
       match: { brands: [...BRAND_GROUPS.DINING], categories: ['식비'] },
       timeWindow: { startHour: 7, endHour: 15, label: '07~15시' },
-      capPerTx: 1_000,
+      maxEligibleAmountPerTx: 10_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: TIME_PLAN_CAP,
       capGroup: TIME,
       capGroupLabel: 'Time Plan (카페·음식점·편의점·배달앱 10%)',
@@ -157,7 +169,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       rate: 0.1,
       match: { brands: ['CU', 'GS25', 'SEVEN_ELEVEN', 'EMART24'] },
       timeWindow: { startHour: 18, endHour: 22, label: '18~22시' },
-      capPerTx: 1_000,
+      maxEligibleAmountPerTx: 10_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: TIME_PLAN_CAP,
       capGroup: TIME,
       capGroupLabel: 'Time Plan (카페·음식점·편의점·배달앱 10%)',
@@ -172,7 +185,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       rate: 0.1,
       match: { brands: ['BAEMIN', 'YOGIYO', 'COUPANG_EATS', 'DDANGYO'] },
       timeWindow: { startHour: 18, endHour: 22, label: '18~22시' },
-      capPerTx: 1_000,
+      maxEligibleAmountPerTx: 10_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: TIME_PLAN_CAP,
       capGroup: TIME,
       capGroupLabel: 'Time Plan (카페·음식점·편의점·배달앱 10%)',
@@ -189,7 +203,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       rate: 0.1,
       // 창고형·기업형 슈퍼(이마트 에브리데이, 롯데슈퍼)는 제외
       match: { brands: [...BRAND_GROUPS.DP_MART] },
-      capPerTx: 5_000,
+      maxEligibleAmountPerTx: 50_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
       capGroup: DAILY,
       capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
@@ -204,7 +219,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       type: 'discount',
       rate: 0.1,
       match: { brands: [...BRAND_GROUPS.DP_ONLINE] },
-      capPerTx: 5_000,
+      maxEligibleAmountPerTx: 50_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
       capGroup: DAILY,
       capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
@@ -220,7 +236,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       type: 'discount',
       rate: 0.1,
       match: { brands: ['OLIVEYOUNG', 'DAISO'] },
-      capPerTx: 5_000,
+      maxEligibleAmountPerTx: 50_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
       capGroup: DAILY,
       capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
@@ -237,7 +254,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       type: 'discount',
       rate: 0.05,
       match: { brands: ['SK_ENERGY', 'GS_CALTEX', 'HYUNDAI_OILBANK', 'S_OIL'] },
-      capPerTx: 2_500,
+      maxEligibleAmountPerTx: 50_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
       capGroup: DAILY,
       capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
@@ -253,7 +271,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       type: 'discount',
       rate: 0.05,
       match: { brands: ['SOCAR'] },
-      capPerTx: 2_500,
+      maxEligibleAmountPerTx: 50_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
       capGroup: DAILY,
       capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
@@ -268,7 +287,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       type: 'discount',
       rate: 0.05,
       match: { brands: ['KAKAO_T', 'UBER_TAXI', 'ITAXI'], keywords: ['택시'] },
-      capPerTx: 2_500,
+      maxEligibleAmountPerTx: 50_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
       capGroup: DAILY,
       capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
@@ -286,7 +306,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       rate: 0.05,
       // 해외 일시불만. 할부 전환분은 제외된다.
       match: { paymentKinds: ['해외'] },
-      capPerTx: 2_500,
+      maxEligibleAmountPerTx: 50_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
       capGroup: DAILY,
       capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
@@ -305,7 +326,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
         brands: ['PHARMACY'],
         keywords: ['병원', '의원', '치과', '약국'],
       },
-      capPerTx: 2_500,
+      maxEligibleAmountPerTx: 50_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
       capGroup: DAILY,
       capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
@@ -320,7 +342,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       type: 'discount',
       rate: 0.05,
       match: { keywords: ['미용실', '헤어', '이용원', '미용'] },
-      capPerTx: 2_500,
+      maxEligibleAmountPerTx: 50_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
       capGroup: DAILY,
       capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
@@ -335,7 +358,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       type: 'discount',
       rate: 0.05,
       match: { brands: [...BRAND_GROUPS.BOOKSTORE] },
-      capPerTx: 2_500,
+      maxEligibleAmountPerTx: 50_000,
+      bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
       capGroup: DAILY,
       capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',

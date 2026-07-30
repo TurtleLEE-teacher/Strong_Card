@@ -105,6 +105,15 @@ export function kstDayOfWeek(isoUtc: string): number {
   return new Date(new Date(isoUtc).getTime() + KST_OFFSET_MS).getUTCDay();
 }
 
+/**
+ * KST 기준 일자 (1~31).
+ * 신한 Plan Day는 "승인 시간 기준으로 매월 1일 23시 59분 59초까지"이므로
+ * UTC로 판정하면 1일 오전 9시 이전 결제가 전달 말일로 새어 나간다.
+ */
+export function kstDayOfMonth(isoUtc: string): number {
+  return new Date(new Date(isoUtc).getTime() + KST_OFFSET_MS).getUTCDate();
+}
+
 /** UTC ISO를 KST 'YYYY-MM-DD' 로 */
 export function toKstDateString(isoUtc: string): string {
   const kst = new Date(new Date(isoUtc).getTime() + KST_OFFSET_MS);
