@@ -23,7 +23,7 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
   last4: ['6359'],
   active: true,
   annualFee: 20_000,
-  color: '#7B4FA8',
+  slot: 5,
   productPageUrl:
     'https://www.shinhancard.com/pconts/html/card/apply/credit/1232369_2207.html',
 

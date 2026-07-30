@@ -1,65 +1,108 @@
-import Image from "next/image";
+import { CARDS_BY_ID } from '@/config/cards';
+import { CardWidget } from '@/components/CardWidget';
+import { getDashboardData } from '@/lib/data';
+import { monthLabel, won } from '@/lib/format';
 
-export default function Home() {
+export const revalidate = 300; // Notion API 3req/s 제한 회피
+
+export default async function DashboardPage() {
+  const { month, snapshots, unmapped, daysRemaining, isDemo, error } =
+    await getDashboardData();
+
+  const totalBenefit = snapshots.reduce((sum, s) => sum + s.totalBenefitUsed, 0);
+  const totalSpend = snapshots.reduce((sum, s) => sum + s.currentSpend, 0);
+
+  // 실적이 모자란 채로 월말이 가까운 카드 — 대시보드 상단에서 먼저 알린다
+  const atRisk = snapshots.filter((s) => {
+    const card = CARDS_BY_ID[s.cardId];
+    return card.performance.required && s.nextTier !== null;
+  });
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="mx-auto w-full max-w-2xl px-4 py-6 pb-16 sm:px-6">
+      <header className="mb-6">
+        <div className="flex items-baseline justify-between gap-3">
+          <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {monthLabel(month)}
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {daysRemaining === 0 ? '오늘이 말일' : `${daysRemaining}일 남음`}
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        {/* 히어로 숫자는 화면당 하나. 이 앱이 존재하는 이유가 이 숫자다. */}
+        <p className="mt-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
+          이번 달 받은 혜택
+        </p>
+        <p
+          className="text-5xl font-semibold tracking-tight"
+          style={{ color: 'var(--text-primary)' }}
+        >
+          {won(totalBenefit)}
+        </p>
+        <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+          총 사용 {won(totalSpend)}
+          {totalSpend > 0 &&
+            ` · 실질 환원율 ${((totalBenefit / totalSpend) * 100).toFixed(1)}%`}
+        </p>
+      </header>
+
+      {isDemo && (
+        <Notice tone="warning">
+          <strong>데모 데이터로 표시 중</strong>
+          {error ? (
+            <> — Notion 연결 실패: {error}</>
+          ) : (
+            <> — .env.local에 NOTION_API_KEY를 설정하면 실제 거래로 바뀝니다.</>
+          )}
+        </Notice>
+      )}
+
+      {unmapped.length > 0 && (
+        <Notice tone="serious">
+          카드를 식별하지 못한 거래 <strong>{unmapped.length}건</strong> — 원문에서 뒷 4자리를
+          찾지 못했습니다. 이 거래들은 어떤 카드의 실적에도 반영되지 않습니다.
+        </Notice>
+      )}
+
+      {atRisk.length > 0 && daysRemaining <= 7 && (
+        <Notice tone="warning">
+          월말까지 {daysRemaining}일 — 실적을 더 채워야 하는 카드 {atRisk.length}장이 있습니다.
+        </Notice>
+      )}
+
+      <div className="space-y-3">
+        {snapshots.map((snapshot) => (
+          <CardWidget
+            key={snapshot.cardId}
+            card={CARDS_BY_ID[snapshot.cardId]}
+            snapshot={snapshot}
+            daysRemaining={daysRemaining}
+          />
+        ))}
+      </div>
+    </main>
+  );
+}
+
+function Notice({
+  tone,
+  children,
+}: {
+  tone: 'warning' | 'serious';
+  children: React.ReactNode;
+}) {
+  const color = tone === 'warning' ? 'var(--status-warning)' : 'var(--status-serious)';
+  return (
+    <div
+      className="mb-3 rounded-xl border px-3 py-2.5 text-xs leading-relaxed"
+      style={{
+        borderColor: `color-mix(in oklab, ${color} 35%, transparent)`,
+        background: `color-mix(in oklab, ${color} 10%, var(--surface))`,
+        color: 'var(--text-secondary)',
+      }}
+    >
+      {children}
     </div>
   );
 }

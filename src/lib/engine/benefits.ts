@@ -22,7 +22,7 @@ import type {
   Transaction,
 } from '@/lib/types';
 import { normalizeMerchant, resolveBrand } from '@/config/merchants';
-import { isRuleEffective } from '@/lib/date';
+import { isRuleEffective, isRuleEffectiveInMonth, type MonthKey } from '@/lib/date';
 
 export interface BenefitResult {
   appliedBenefits: AppliedBenefit[];
@@ -140,10 +140,15 @@ export interface ComputeBenefitsInput {
   appliedTier: SpendTier | null;
   /** 거래별 실적 판정. 제외 거래에 혜택을 주지 않기 위해 참조한다. */
   verdicts?: Map<string, PerformanceVerdict>;
+  /**
+   * 집계 대상 월. 이 달에 유효하지 않은 룰(아직 시작 전이거나 이미 끝난
+   * 프로모션)을 혜택 목록에서 감추는 데 쓴다.
+   */
+  month?: MonthKey;
 }
 
 export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
-  const { card, appliedTier, verdicts } = input;
+  const { card, appliedTier, verdicts, month } = input;
 
   // 이용 순서대로 한도를 소진해야 실제 청구서와 일치한다.
   const transactions = [...input.transactions].sort(
@@ -223,6 +228,10 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
   }
 
   const usage: BenefitUsage[] = card.benefits
+    .filter(
+      (rule) =>
+        !month || isRuleEffectiveInMonth(month, rule.effectiveFrom, rule.effectiveUntil),
+    )
     .map((rule) => {
       const cap = resolveCap(rule.capPerMonth, appliedTier);
       const used = monthlyUsed.get(rule.id) ?? 0;

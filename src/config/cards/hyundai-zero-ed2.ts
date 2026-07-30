@@ -19,7 +19,7 @@ export const HYUNDAI_ZERO_ED2: Card = {
   last4: ['7316'],
   active: true,
   annualFee: 10_000,
-  color: '#4A4A4A',
+  slot: 4,
   productPageUrl: 'https://www.hyundaicard.com/cpc/na/CPCNA0101_01.hc',
 
   performance: {

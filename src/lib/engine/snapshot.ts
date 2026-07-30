@@ -66,6 +66,7 @@ export function buildSnapshot(
     transactions: current,
     appliedTier,
     verdicts: perf.verdicts,
+    month,
   });
 
   const issuerReportedSpend = latestIssuerCumulative(current);

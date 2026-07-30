@@ -19,7 +19,7 @@ export const KB_TANTANDAERO: Card = {
   last4: ['6089'],
   active: true,
   annualFee: 40_000,
-  color: '#8B5E3C',
+  slot: 1,
   productPageUrl: 'https://m.kbcard.com/CXHIACRC0002.cms?allianceCode=09230&mainCC=b',
 
   performance: {

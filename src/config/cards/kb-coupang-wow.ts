@@ -20,7 +20,7 @@ export const KB_COUPANG_WOW: Card = {
   last4: ['3211'],
   active: true,
   annualFee: 20_000,
-  color: '#C7332F',
+  slot: 2,
   productPageUrl: 'https://card-lounge.toss.im/card/6090',
 
   performance: {

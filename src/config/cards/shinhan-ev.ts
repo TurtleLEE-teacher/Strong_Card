@@ -21,7 +21,7 @@ export const SHINHAN_EV: Card = {
   last4: ['4401'],
   active: true,
   annualFee: 15_000,
-  color: '#2E9E6B',
+  slot: 6,
   productPageUrl:
     'https://www.shinhancard.com/pconts/html/card/apply/credit/1188380_2207.html',
 

@@ -164,8 +164,13 @@ export interface Card {
   last4: string[];
   active: boolean;
   annualFee: number;
-  /** UI 강조 색 (Tailwind 클래스가 아니라 CSS 색상값) */
-  color: string;
+  /**
+   * 카드 식별 색 슬롯 (1~6).
+   * 검증된 카테고리 팔레트의 고정 순서를 그대로 쓴다. 슬롯은 카드에
+   * 귀속되며 순환시키지 않는다 — 카드를 하나 숨긴다고 나머지 색이
+   * 바뀌면 사용자가 색으로 카드를 기억할 수 없다.
+   */
+  slot: 1 | 2 | 3 | 4 | 5 | 6;
   performance: PerformancePolicy;
   benefits: BenefitRule[];
   /** 카드 통합 월 혜택 한도. tiers의 totalBenefitCap과 중복되면 이쪽이 우선. */

@@ -80,6 +80,28 @@ export function toKstDateString(isoUtc: string): string {
   return kst.toISOString().slice(0, 10);
 }
 
+/**
+ * 룰의 유효기간이 해당 **월과 겹치는지**.
+ *
+ * 월별 혜택 현황 목록에서 쓴다. 거래 단위 판정(isRuleEffective)과 달리,
+ * 아직 시작하지 않았거나 이미 끝난 룰을 목록에서 통째로 감추기 위한 것이다.
+ * 이걸 안 하면 프로모션 종료 후에나 발효될 룰이 "0 / 20,000원"으로 표시돼
+ * 혜택을 못 받고 있는 것처럼 읽힌다.
+ */
+export function isRuleEffectiveInMonth(
+  month: MonthKey,
+  effectiveFrom?: string,
+  effectiveUntil?: string,
+): boolean {
+  const [y, m] = month.split('-').map(Number);
+  const monthStart = `${month}-01`;
+  const monthEnd = `${month}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`;
+
+  if (effectiveFrom && effectiveFrom > monthEnd) return false;
+  if (effectiveUntil && effectiveUntil < monthStart) return false;
+  return true;
+}
+
 /** 룰의 유효기간(effectiveFrom/Until)이 해당 거래일에 유효한지 */
 export function isRuleEffective(
   isoUtc: string,

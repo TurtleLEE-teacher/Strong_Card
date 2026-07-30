@@ -17,7 +17,7 @@ export const SAMSUNG_AMEX_BLUE: Card = {
   last4: ['2055'],
   active: true,
   annualFee: 20_000,
-  color: '#2E6DB4',
+  slot: 3,
   productPageUrl:
     'https://www.americanexpress.com/ko-kr/network/credit-cards/samsung/blue-card.html',
 
