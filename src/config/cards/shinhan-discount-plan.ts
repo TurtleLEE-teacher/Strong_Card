@@ -1,49 +1,91 @@
 import { BRAND_GROUPS } from '../merchants';
-import type { Card, TierCap } from '@/lib/types';
+import type { Card, ExclusionRule, TierCap } from '@/lib/types';
 import { COMMON_EXCLUSIONS } from '../exclusions';
 
 /**
  * 신한카드 Discount Plan (2025-04-17 출시)
  *
- * 카드 앱 화면 기준 혜택 구성:
- *   외식·배달·편의점    10% 할인
- *   쇼핑·주유·생활      5~10% 할인
- *   공과금·디지털구독   10~20% 할인
+ * 공식 약관 기준. 이 카드는 **통합 한도 하나가 아니라 서비스별 한도 4개**로
+ * 굴러간다. 마케팅의 "월 최대 6만원"은 네 한도의 합계다.
  *
- * 서비스는 세 갈래로 나뉜다.
- *   Time Plan    승인 시각대별 — DAY(카페·음식점) 07~15시 /
- *                              NIGHT(편의점·배달앱) 18~22시
- *   Daily Plan   마트·온라인쇼핑·아울렛·잡화 10%
- *   Monthly Plan 공과금 10% / 디지털구독·멤버십 20% (정기결제)
+ *   전월 이용금액       40~80만   80~120만   120만+
+ *   ─────────────────────────────────────────────
+ *   Time Plan            5,000    10,000    15,000
+ *   Daily Plan          10,000    20,000    30,000
+ *   Monthly 정기결제      3,000     7,000    10,000
+ *   Monthly 영화예매      5,000     5,000     5,000
+ *   ─────────────────────────────────────────────
+ *   월 최대             23,000    42,000    60,000
  *
- * 이 카드의 두 가지 특이점:
+ * 서비스 구성
+ *   Time Plan    DAY(07~15시) 카페·음식점 / NIGHT(18~22시) 편의점·배달앱  각 10%
+ *                영역별 일 1회, 할인 전 이용금액 1회 1만원까지
+ *   Daily Plan   쇼핑 10% (마트·온라인쇼핑·잡화)
+ *                이동  5% (주유·카쉐어링·택시)
+ *                생활  5% (해외·병원약국·미용실·온라인서점)
+ *                영역별 일 1회 월 5회, 할인 전 이용금액 1회 5만원까지
+ *   Monthly Plan 공과금 10% / 디지털구독·멤버십 20% / 영화예매 5천원(월 1회)
  *
- * 1) **승인 시각대**로 할인 영역이 갈린다. 시각을 안 보면 점심에 산
- *    편의점 물건과 밤에 산 것이 뒤섞인다.
+ * ⚠️ 모델링하지 않은 것: **Plan Day** (매월 1일 첫 거래 할인율 2배).
+ *    Time Plan·Daily Plan 각 1회씩 적용되며 기존 한도·횟수 안에서 제공된다.
+ *    영역별 일 횟수까지 공유해야 정확한데 그 표현이 엔진에 없다. 잘못 넣으면
+ *    과다 계상되므로 아예 빼뒀다 — 매월 1일에 실제보다 조금 적게 나온다.
  *
- * 2) **공과금이 할인 대상**이다. 공과금은 보통 실적·혜택에서 모두
- *    빠지는데 이 카드는 할인을 준다. 실적에는 여전히 안 잡히므로
- *    applyToExcludedSpend로 예외 처리한다.
- *
- * 출처: 카드 앱 상품 화면(사용자 제공), 신한카드 공식 안내, 뱅크샐러드
+ * 출처: 신한카드 공식 상품 안내 (사용자 제공 전문)
  * https://www.shinhancard.com/pconts/html/card/apply/credit/1232369_2207.html
  */
 
-/**
- * 구간별 통합 할인한도.
- *
- * ⚠️ **구간 경계(40/80/120/150/180만)는 확인됐지만 각 구간의 한도 금액은
- *    추정치다.** 공개 자료에서 확인된 건 "CGV·롯데시네마 전월 40만원 이상
- *    최대 5천원"뿐이다. 이용대금명세서로 확정해야 한다.
- *    설정 화면에 '확인 필요'로 노출된다.
- */
-const TIER_CAPS: TierCap[] = [
+// ── 서비스별 월 통합 한도 ────────────────────────────────────────────────
+const TIME_PLAN_CAP: TierCap[] = [
+  { threshold: 0, cap: 0 },
+  { threshold: 400_000, cap: 5_000 },
+  { threshold: 800_000, cap: 10_000 },
+  { threshold: 1_200_000, cap: 15_000 },
+];
+
+const DAILY_PLAN_CAP: TierCap[] = [
   { threshold: 0, cap: 0 },
   { threshold: 400_000, cap: 10_000 },
   { threshold: 800_000, cap: 20_000 },
   { threshold: 1_200_000, cap: 30_000 },
-  { threshold: 1_500_000, cap: 40_000 },
-  { threshold: 1_800_000, cap: 50_000 },
+];
+
+const RECURRING_CAP: TierCap[] = [
+  { threshold: 0, cap: 0 },
+  { threshold: 400_000, cap: 3_000 },
+  { threshold: 800_000, cap: 7_000 },
+  { threshold: 1_200_000, cap: 10_000 },
+];
+
+const CINEMA_CAP: TierCap[] = [
+  { threshold: 0, cap: 0 },
+  { threshold: 400_000, cap: 5_000 },
+  { threshold: 800_000, cap: 5_000 },
+  { threshold: 1_200_000, cap: 5_000 },
+];
+
+const TIME = 'dp-time';
+const DAILY = 'dp-daily';
+const RECURRING = 'dp-recurring';
+const CINEMA = 'dp-cinema';
+
+/**
+ * 이 카드만의 실적 제외 항목.
+ * 공통 목록에 없는 것들이 약관에 명시돼 있다.
+ */
+const DP_EXCLUSIONS: ExclusionRule[] = [
+  ...COMMON_EXCLUSIONS,
+  {
+    verdict: '제외-공과금',
+    reason: 'TV수신료·환경개선부담금',
+    keywords: ['TV수신료', '수신료', '환경개선부담금', '지방세외수입'],
+  },
+  {
+    verdict: '제외-기타',
+    // 약관에 '철도 업종 이용금액'이 명시돼 있다. 다른 카드에는 없는 조건이다.
+    reason: '철도 업종',
+    keywords: ['코레일', '한국철도공사', 'SRT', '에스알'],
+  },
 ];
 
 export const SHINHAN_DISCOUNT_PLAN: Card = {
@@ -54,7 +96,7 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
   shortName: 'Discount Plan',
   last4: ['6359'],
   active: true,
-  annualFee: 15_000, // 국내전용·Mastercard 모두 1만5천원 (카드 앱 확인)
+  annualFee: 15_000, // 국내전용·Mastercard 모두 1만5천원
   slot: 5,
   productPageUrl:
     'https://www.shinhancard.com/pconts/html/card/apply/credit/1232369_2207.html',
@@ -62,123 +104,323 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
   performance: {
     required: true,
     countsForeignSpend: true,
-    installmentPolicy: 'full', // 전월(1일~말일) 일시불 + 할부 기준
-    // 구간 경계는 확인됐으나 한도 금액은 추정.
-    tierConfidence: 'estimated',
+    installmentPolicy: 'full', // 전월(1일~말일) 일시불 + 할부
+    tierConfidence: 'confirmed',
     tiers: [
-      { threshold: 0, label: '실적 미달', totalBenefitCap: 0 },
-      { threshold: 400_000, label: '40만원', totalBenefitCap: 10_000 },
-      { threshold: 800_000, label: '80만원', totalBenefitCap: 20_000 },
-      { threshold: 1_200_000, label: '120만원', totalBenefitCap: 30_000 },
-      { threshold: 1_500_000, label: '150만원', totalBenefitCap: 40_000 },
-      { threshold: 1_800_000, label: '180만원', totalBenefitCap: 50_000 },
+      // 서비스별 한도가 따로 있으므로 통합 한도는 두지 않는다.
+      { threshold: 0, label: '실적 미달', totalBenefitCap: null },
+      { threshold: 400_000, label: '40만원', totalBenefitCap: null },
+      { threshold: 800_000, label: '80만원', totalBenefitCap: null },
+      { threshold: 1_200_000, label: '120만원', totalBenefitCap: null },
     ],
-    exclusions: COMMON_EXCLUSIONS,
+    exclusions: DP_EXCLUSIONS,
   },
 
   benefits: [
-    // ── Monthly Plan: 공과금·디지털구독 ────────────────────────────────
+    // ══ Time Plan — 영역별 일 1회, 건당 1만원까지 (→ 최대 1,000원) ══════
     {
-      id: 'dp-subscription',
-      label: '디지털구독·멤버십 20% 할인',
-      type: 'discount',
-      rate: 0.2,
-      match: { brands: [...BRAND_GROUPS.SUBSCRIPTION], categories: ['구독'] },
-      // 할인 전 이용금액 1만원까지가 대상 → 건당 최대 2,000원
-      capPerTx: 2_000,
-      capPerMonth: TIER_CAPS,
-      priority: 10,
-      confidence: 'confirmed',
-      notes: '공식 홈페이지 정기결제(자동납부)만 대상. 일/월 횟수 제한 없음',
-    },
-    {
-      id: 'dp-utility',
-      label: '공과금 10% 할인',
+      id: 'dp-time-cafe',
+      label: '카페 10% (07~15시)',
       type: 'discount',
       rate: 0.1,
-      match: {
-        brands: [...BRAND_GROUPS.UTILITY],
-        keywords: ['전기요금', '도시가스', '상하수도', '수도요금', '관리비', '공과금'],
-      },
-      // 할인 전 이용금액 5만원까지가 대상 → 건당 최대 5,000원
-      capPerTx: 5_000,
-      capPerMonth: TIER_CAPS,
-      priority: 10,
-      // 공과금은 실적에서는 빠지지만 이 카드에서는 할인 대상이다.
-      applyToExcludedSpend: true,
-      confidence: 'confirmed',
-    },
-
-    // ── Time Plan: 시각대별 10% ────────────────────────────────────────
-    {
-      id: 'dp-day-dining',
-      label: '카페·음식점 10% 할인 (07~15시)',
-      type: 'discount',
-      rate: 0.1,
-      match: {
-        brands: [...BRAND_GROUPS.CAFE, ...BRAND_GROUPS.DINING],
-        categories: ['카페', '식비'],
-      },
+      // 지정 6개 브랜드만. 일반 카페 브랜드를 넣으면 과다 계상된다.
+      match: { brands: [...BRAND_GROUPS.DP_CAFE] },
       timeWindow: { startHour: 7, endHour: 15, label: '07~15시' },
-      capPerMonth: TIER_CAPS,
+      capPerTx: 1_000,
+      capPerMonth: TIME_PLAN_CAP,
+      capGroup: TIME,
+      capGroupLabel: 'Time Plan (카페·음식점·편의점·배달앱 10%)',
+      maxCountPerDay: 1,
+      // 카페 브랜드가 음식점 업종이어도 카페 할인이 우선한다.
+      priority: 10,
+      confidence: 'confirmed',
+    },
+    {
+      id: 'dp-time-restaurant',
+      label: '음식점 10% (07~15시)',
+      type: 'discount',
+      rate: 0.1,
+      match: { brands: [...BRAND_GROUPS.DINING], categories: ['식비'] },
+      timeWindow: { startHour: 7, endHour: 15, label: '07~15시' },
+      capPerTx: 1_000,
+      capPerMonth: TIME_PLAN_CAP,
+      capGroup: TIME,
+      capGroupLabel: 'Time Plan (카페·음식점·편의점·배달앱 10%)',
+      maxCountPerDay: 1,
+      priority: 15,
+      confidence: 'confirmed',
+    },
+    {
+      id: 'dp-time-cvs',
+      label: '편의점 10% (18~22시)',
+      type: 'discount',
+      rate: 0.1,
+      match: { brands: ['CU', 'GS25', 'SEVEN_ELEVEN', 'EMART24'] },
+      timeWindow: { startHour: 18, endHour: 22, label: '18~22시' },
+      capPerTx: 1_000,
+      capPerMonth: TIME_PLAN_CAP,
+      capGroup: TIME,
+      capGroupLabel: 'Time Plan (카페·음식점·편의점·배달앱 10%)',
+      maxCountPerDay: 1,
+      priority: 10,
+      confidence: 'confirmed',
+    },
+    {
+      id: 'dp-time-delivery',
+      label: '배달앱 10% (18~22시)',
+      type: 'discount',
+      rate: 0.1,
+      match: { brands: ['BAEMIN', 'YOGIYO', 'COUPANG_EATS', 'DDANGYO'] },
+      timeWindow: { startHour: 18, endHour: 22, label: '18~22시' },
+      capPerTx: 1_000,
+      capPerMonth: TIME_PLAN_CAP,
+      capGroup: TIME,
+      capGroupLabel: 'Time Plan (카페·음식점·편의점·배달앱 10%)',
+      maxCountPerDay: 1,
+      priority: 10,
+      confidence: 'confirmed',
+    },
+
+    // ══ Daily Plan 쇼핑 10% — 영역별 일 1회·월 5회, 건당 5만원까지 ══════
+    {
+      id: 'dp-daily-mart',
+      label: '마트 10%',
+      type: 'discount',
+      rate: 0.1,
+      // 창고형·기업형 슈퍼(이마트 에브리데이, 롯데슈퍼)는 제외
+      match: { brands: [...BRAND_GROUPS.DP_MART] },
+      capPerTx: 5_000,
+      capPerMonth: DAILY_PLAN_CAP,
+      capGroup: DAILY,
+      capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
+      maxCountPerDay: 1,
+      maxCountPerMonth: 5,
       priority: 20,
       confidence: 'confirmed',
     },
     {
-      id: 'dp-night-convenience',
-      label: '편의점·배달앱 10% 할인 (18~22시)',
+      id: 'dp-daily-online',
+      label: '온라인쇼핑 10%',
       type: 'discount',
       rate: 0.1,
-      match: { brands: [...BRAND_GROUPS.CONVENIENCE, ...BRAND_GROUPS.DELIVERY] },
-      timeWindow: { startHour: 18, endHour: 22, label: '18~22시' },
-      capPerMonth: TIER_CAPS,
+      match: { brands: [...BRAND_GROUPS.DP_ONLINE] },
+      capPerTx: 5_000,
+      capPerMonth: DAILY_PLAN_CAP,
+      capGroup: DAILY,
+      capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
+      maxCountPerDay: 1,
+      maxCountPerMonth: 5,
+      priority: 20,
+      confidence: 'confirmed',
+      notes: '멤버십·구독료, 쿠팡이츠는 제외',
+    },
+    {
+      id: 'dp-daily-goods',
+      label: '잡화 10% (올리브영·다이소)',
+      type: 'discount',
+      rate: 0.1,
+      match: { brands: ['OLIVEYOUNG', 'DAISO'] },
+      capPerTx: 5_000,
+      capPerMonth: DAILY_PLAN_CAP,
+      capGroup: DAILY,
+      capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
+      maxCountPerDay: 1,
+      maxCountPerMonth: 5,
       priority: 20,
       confidence: 'confirmed',
     },
 
-    // ── Daily Plan: 쇼핑·생활 ──────────────────────────────────────────
+    // ══ Daily Plan 이동 5% ═══════════════════════════════════════════════
     {
-      id: 'dp-shopping',
-      label: '마트·온라인쇼핑·아울렛 10% 할인',
+      id: 'dp-daily-fuel',
+      label: '주유 5%',
       type: 'discount',
-      rate: 0.1,
-      match: {
-        brands: [
-          ...BRAND_GROUPS.MART,
-          ...BRAND_GROUPS.ONLINE_SHOPPING,
-          ...BRAND_GROUPS.LIVING,
-          'STARFIELD',
-        ],
-        categories: ['생활'],
-      },
-      capPerMonth: TIER_CAPS,
+      rate: 0.05,
+      match: { brands: ['SK_ENERGY', 'GS_CALTEX', 'HYUNDAI_OILBANK', 'S_OIL'] },
+      capPerTx: 2_500,
+      capPerMonth: DAILY_PLAN_CAP,
+      capGroup: DAILY,
+      capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
+      maxCountPerDay: 1,
+      maxCountPerMonth: 5,
+      priority: 30,
+      confidence: 'confirmed',
+      notes: 'LPG는 제외 (휘발유·경유·등유만)',
+    },
+    {
+      id: 'dp-daily-carshare',
+      label: '카쉐어링 5% (쏘카)',
+      type: 'discount',
+      rate: 0.05,
+      match: { brands: ['SOCAR'] },
+      capPerTx: 2_500,
+      capPerMonth: DAILY_PLAN_CAP,
+      capGroup: DAILY,
+      capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
+      maxCountPerDay: 1,
+      maxCountPerMonth: 5,
       priority: 30,
       confidence: 'confirmed',
     },
     {
-      id: 'dp-cinema',
-      label: '영화 할인 (CGV·롯데시네마)',
-      type: 'discount',
-      rate: 0.2,
-      match: { brands: ['CGV', 'LOTTE_CINEMA'] },
-      // 전월 40만원 이상에서 최대 5천원
-      capPerMonth: [
-        { threshold: 0, cap: 0 },
-        { threshold: 400_000, cap: 5_000 },
-      ],
-      priority: 25,
-      confidence: 'confirmed',
-      notes: '요율은 미확인 — 최대 5천원 한도만 확인됨',
-    },
-    {
-      id: 'dp-fuel',
-      label: '주유 5% 할인',
+      id: 'dp-daily-taxi',
+      label: '택시 5%',
       type: 'discount',
       rate: 0.05,
-      match: { brands: [...BRAND_GROUPS.FUEL] },
-      capPerMonth: TIER_CAPS,
-      priority: 40,
-      confidence: 'estimated',
+      match: { brands: ['KAKAO_T', 'UBER_TAXI', 'ITAXI'], keywords: ['택시'] },
+      capPerTx: 2_500,
+      capPerMonth: DAILY_PLAN_CAP,
+      capGroup: DAILY,
+      capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
+      maxCountPerDay: 1,
+      maxCountPerMonth: 5,
+      priority: 30,
+      confidence: 'confirmed',
+    },
+
+    // ══ Daily Plan 생활 5% ═══════════════════════════════════════════════
+    {
+      id: 'dp-daily-overseas',
+      label: '해외 5%',
+      type: 'discount',
+      rate: 0.05,
+      // 해외 일시불만. 할부 전환분은 제외된다.
+      match: { paymentKinds: ['해외'] },
+      capPerTx: 2_500,
+      capPerMonth: DAILY_PLAN_CAP,
+      capGroup: DAILY,
+      capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
+      maxCountPerDay: 1,
+      maxCountPerMonth: 5,
+      priority: 30,
+      confidence: 'confirmed',
+      notes: 'Mastercard 해외겸용 카드만. 원화 청구금액 기준',
+    },
+    {
+      id: 'dp-daily-medical',
+      label: '병원·약국 5%',
+      type: 'discount',
+      rate: 0.05,
+      match: {
+        brands: ['PHARMACY'],
+        keywords: ['병원', '의원', '치과', '약국'],
+      },
+      capPerTx: 2_500,
+      capPerMonth: DAILY_PLAN_CAP,
+      capGroup: DAILY,
+      capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
+      maxCountPerDay: 1,
+      maxCountPerMonth: 5,
+      priority: 30,
+      confidence: 'confirmed',
+    },
+    {
+      id: 'dp-daily-salon',
+      label: '미용실 5%',
+      type: 'discount',
+      rate: 0.05,
+      match: { keywords: ['미용실', '헤어', '이용원', '미용'] },
+      capPerTx: 2_500,
+      capPerMonth: DAILY_PLAN_CAP,
+      capGroup: DAILY,
+      capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
+      maxCountPerDay: 1,
+      maxCountPerMonth: 5,
+      priority: 30,
+      confidence: 'confirmed',
+    },
+    {
+      id: 'dp-daily-bookstore',
+      label: '온라인서점 5%',
+      type: 'discount',
+      rate: 0.05,
+      match: { brands: [...BRAND_GROUPS.BOOKSTORE] },
+      capPerTx: 2_500,
+      capPerMonth: DAILY_PLAN_CAP,
+      capGroup: DAILY,
+      capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
+      maxCountPerDay: 1,
+      maxCountPerMonth: 5,
+      priority: 30,
+      confidence: 'confirmed',
+    },
+
+    // ══ Monthly Plan 정기결제 ════════════════════════════════════════════
+    {
+      id: 'dp-subscription',
+      label: '디지털구독·멤버십 20%',
+      type: 'discount',
+      rate: 0.2,
+      match: {
+        brands: ['NETFLIX', 'YOUTUBE_PREMIUM', 'TVING', 'DISNEY_PLUS', 'MILLIE'],
+        keywords: ['네이버플러스멤버십', '쿠팡와우멤버십', '와우멤버십'],
+        categories: ['구독'],
+      },
+      // 할인 전 이용금액 1회 1만원까지 → 건당 최대 2,000원
+      capPerTx: 2_000,
+      capPerMonth: RECURRING_CAP,
+      capGroup: RECURRING,
+      capGroupLabel: 'Monthly Plan 정기결제 (공과금 10% · 구독 20%)',
+      priority: 10,
+      confidence: 'confirmed',
+      notes: '공식 홈페이지 정기결제만. 인앱결제·통신요금 포함 결제는 제외. 횟수 무제한',
+    },
+    {
+      id: 'dp-utility',
+      label: '공과금 10%',
+      type: 'discount',
+      rate: 0.1,
+      // 아파트관리비·도시가스·전기요금. 통신요금은 아래 별도 룰(월 1회 제한).
+      match: {
+        brands: ['APT_FEE', 'CITY_GAS', 'KEPCO_BILL'],
+        keywords: ['아파트관리비', '관리비', '도시가스', '전기요금'],
+      },
+      // 할인 전 이용금액 1회 5만원까지 → 건당 최대 5,000원
+      capPerTx: 5_000,
+      capPerMonth: RECURRING_CAP,
+      capGroup: RECURRING,
+      capGroupLabel: 'Monthly Plan 정기결제 (공과금 10% · 구독 20%)',
+      priority: 12,
+      // 공과금은 실적에서 빠지지만 이 카드에서는 할인 대상이다.
+      applyToExcludedSpend: true,
+      confidence: 'confirmed',
+      notes: '자동납부 시에만 할인. 횟수 무제한',
+    },
+    {
+      id: 'dp-telecom',
+      label: '통신요금 10%',
+      type: 'discount',
+      rate: 0.1,
+      match: { brands: ['SKT', 'KT', 'LGU'] },
+      capPerTx: 5_000,
+      capPerMonth: RECURRING_CAP,
+      capGroup: RECURRING,
+      capGroupLabel: 'Monthly Plan 정기결제 (공과금 10% · 구독 20%)',
+      // 통신요금만 월 1회 제한이 따로 있다.
+      maxCountPerMonth: 1,
+      priority: 12,
+      confidence: 'confirmed',
+      notes: '순수 통신요금 자동납부만. 알뜰폰·선불폰·결합상품 제외',
+    },
+
+    // ══ Monthly Plan 영화예매 — 별도 한도 5,000원 ════════════════════════
+    {
+      id: 'dp-cinema',
+      label: '영화 예매 5,000원 할인',
+      type: 'discount',
+      // 정률이 아니라 정액 5,000원이다. 건당 한도로 정액을 표현한다.
+      // rate 1.0 + capPerTx 5,000 → 조건을 넘는 거래는 항상 정확히 5,000원.
+      rate: 1,
+      match: { brands: ['CGV', 'LOTTE_CINEMA'] },
+      minAmountPerTx: 12_000,
+      capPerTx: 5_000,
+      capPerMonth: CINEMA_CAP,
+      capGroup: CINEMA,
+      capGroupLabel: 'Monthly Plan 영화예매',
+      maxCountPerMonth: 1,
+      priority: 5,
+      confidence: 'confirmed',
+      notes: '영화 예매만. 예매권·상품권·매점·통신사 예매는 제외',
     },
   ],
 };

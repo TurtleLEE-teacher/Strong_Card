@@ -38,7 +38,10 @@ function txAt(title: string, krwAmount: number, day: string, kstHourValue: numbe
   };
 }
 
-/** 60만 구간을 만들어 주는 지난달 실적 */
+/**
+ * 40만 구간(40만 이상 80만 미만)을 만들어 주는 지난달 실적.
+ * Time Plan 한도 5,000 / Daily Plan 10,000 / 정기결제 3,000 / 영화 5,000.
+ */
 const PREV_MONTH = txAt('아무데나', 700_000, '2026-06-15', 12);
 
 describe('KST 시각 유틸', () => {
@@ -65,8 +68,9 @@ describe('KST 시각 유틸', () => {
 
 describe('Discount Plan 시간대 할인', () => {
   it('카페는 07~15시에만 할인된다', () => {
+    // 20,000 × 10% = 2,000이지만 Time Plan은 건당 1,000원까지다
     const inWindow = buildSnapshot(dp, [PREV_MONTH, txAt('스타벅스 강남점', 20_000, '2026-07-10', 12)], '2026-07');
-    expect(inWindow.totalBenefitUsed).toBe(2_000); // 10%
+    expect(inWindow.totalBenefitUsed).toBe(1_000);
 
     const outWindow = buildSnapshot(dp, [PREV_MONTH, txAt('스타벅스 강남점', 20_000, '2026-07-10', 16)], '2026-07');
     expect(outWindow.totalBenefitUsed).toBe(0);
@@ -74,7 +78,7 @@ describe('Discount Plan 시간대 할인', () => {
 
   it('편의점은 18~22시에만 할인된다', () => {
     const inWindow = buildSnapshot(dp, [PREV_MONTH, txAt('GS25 역삼점', 20_000, '2026-07-10', 19)], '2026-07');
-    expect(inWindow.totalBenefitUsed).toBe(2_000);
+    expect(inWindow.totalBenefitUsed).toBe(1_000);
 
     const outWindow = buildSnapshot(dp, [PREV_MONTH, txAt('GS25 역삼점', 20_000, '2026-07-10', 12)], '2026-07');
     expect(outWindow.totalBenefitUsed).toBe(0);
@@ -85,7 +89,20 @@ describe('Discount Plan 시간대 할인', () => {
     const lunch = buildSnapshot(dp, [PREV_MONTH, txAt('CU 편의점', 30_000, '2026-07-10', 13)], '2026-07');
     const night = buildSnapshot(dp, [PREV_MONTH, txAt('CU 편의점', 30_000, '2026-07-10', 20)], '2026-07');
     expect(lunch.totalBenefitUsed).toBe(0);
-    expect(night.totalBenefitUsed).toBe(3_000);
+    expect(night.totalBenefitUsed).toBe(1_000);
+  });
+
+  it('영역별로 하루 1회만 할인된다', () => {
+    const snapshot = buildSnapshot(
+      dp,
+      [
+        PREV_MONTH,
+        txAt('스타벅스', 20_000, '2026-07-10', 9),
+        txAt('투썸플레이스', 20_000, '2026-07-10', 13),
+      ],
+      '2026-07',
+    );
+    expect(snapshot.totalBenefitUsed).toBe(1_000);
   });
 
   it('UTC로 판정하면 틀리는 경계 시각을 KST로 올바로 본다', () => {
@@ -93,7 +110,7 @@ describe('Discount Plan 시간대 할인', () => {
     const tx = txAt('스타벅스', 20_000, '2026-07-10', 8);
     expect(tx.approvedAt).toContain('2026-07-09T23:00');
     const snapshot = buildSnapshot(dp, [PREV_MONTH, tx], '2026-07');
-    expect(snapshot.totalBenefitUsed).toBe(2_000);
+    expect(snapshot.totalBenefitUsed).toBe(1_000);
   });
 });
 
@@ -111,7 +128,7 @@ describe('Discount Plan 공과금 할인', () => {
     const result = computeBenefits({
       card: dp,
       transactions: [utility],
-      appliedTier: dp.performance.tiers[2], // 60만 구간
+      appliedTier: dp.performance.tiers[3], // 120만 구간 (정기결제 한도 10,000)
       verdicts: perf.verdicts,
       month: '2026-07',
     });
@@ -126,7 +143,8 @@ describe('Discount Plan 공과금 할인', () => {
       amount: 80_000,
       at: '2026-07-15T03:00:00Z',
     });
-    expect(result.expectedBenefit).toBe(5_000);
+    // 80,000 × 10% = 8,000 → 건당 5,000 → 40만 구간 정기결제 한도 3,000
+    expect(result.expectedBenefit).toBe(3_000);
     expect(result.ruleLabel).toContain('공과금');
   });
 
@@ -159,23 +177,57 @@ describe('Discount Plan 디지털구독', () => {
   });
 });
 
-describe('브랜드 사전 확장', () => {
-  it('새로 추가한 카페 브랜드가 인식된다', () => {
-    const snapshot = buildSnapshot(
+describe('Discount Plan 대상 가맹점은 약관에 열거된 것뿐이다', () => {
+  it('지정 6개 카페만 할인된다', () => {
+    const listed = buildSnapshot(
+      dp,
+      [PREV_MONTH, txAt('폴바셋 선릉점', 20_000, '2026-07-10', 11)],
+      '2026-07',
+    );
+    expect(listed.totalBenefitUsed).toBe(1_000);
+
+    // 할리스는 약관 목록에 없다. 일반 카페 브랜드를 다 넣으면 과다 계상된다.
+    const unlisted = buildSnapshot(
       dp,
       [PREV_MONTH, txAt('할리스커피 선릉점', 20_000, '2026-07-10', 11)],
       '2026-07',
     );
-    expect(snapshot.totalBenefitUsed).toBe(2_000);
+    expect(unlisted.totalBenefitUsed).toBe(0);
   });
 
-  it('새로 추가한 편의점 브랜드가 인식된다', () => {
-    const snapshot = buildSnapshot(
+  it('편의점은 CU·GS25·세븐일레븐·이마트24만 대상이다', () => {
+    const listed = buildSnapshot(
+      dp,
+      [PREV_MONTH, txAt('GS25 역삼점', 20_000, '2026-07-10', 20)],
+      '2026-07',
+    );
+    expect(listed.totalBenefitUsed).toBe(1_000);
+
+    // 미니스톱은 약관 목록에 없다
+    const unlisted = buildSnapshot(
       dp,
       [PREV_MONTH, txAt('미니스톱 역삼점', 20_000, '2026-07-10', 20)],
       '2026-07',
     );
-    expect(snapshot.totalBenefitUsed).toBe(2_000);
+    expect(unlisted.totalBenefitUsed).toBe(0);
+  });
+
+  it('영화 예매는 정액 5,000원 할인이다', () => {
+    const snapshot = buildSnapshot(
+      dp,
+      [PREV_MONTH, txAt('CGV 강남', 15_000, '2026-07-10', 19)],
+      '2026-07',
+    );
+    expect(snapshot.totalBenefitUsed).toBe(5_000);
+  });
+
+  it('영화 예매는 12,000원 미만이면 할인되지 않는다', () => {
+    const snapshot = buildSnapshot(
+      dp,
+      [PREV_MONTH, txAt('CGV 강남', 11_000, '2026-07-10', 19)],
+      '2026-07',
+    );
+    expect(snapshot.totalBenefitUsed).toBe(0);
   });
 });
 

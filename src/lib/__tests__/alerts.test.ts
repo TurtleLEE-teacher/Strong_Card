@@ -117,59 +117,62 @@ describe('실적 구간 달성', () => {
 });
 
 describe('혜택 한도 소진', () => {
-  // 탄탄대로는 통합 한도가 없어(영역별 한도만) 한도 소진 알림 대상이 아니다.
-  // 통합 한도가 있는 Discount Plan으로 검증한다.
-  const dp = CARDS_BY_ID['shinhan-discount-plan'];
-  // 6월 40만 실적 → 7월 통합 한도 10,000원.
-  const base = tx('shinhan-discount-plan', '아방가르드', 400_000, '06-15');
 
-  it('통합 한도가 없는 카드는 소진 알림 대상이 아니다', () => {
+  it('80% 미만이면 조용하다', () => {
     const snapshot = buildSnapshot(
       tantan,
       [
-        tx('kb-tantandaero', '아방가르드', 900_000, '06-15'),
-        tx('kb-tantandaero', '헤어살롱', 300_000, '07-05'),
+        tx('kb-tantandaero', '아방가르드', 900_000, '06-15'), // 80만 구간
+        tx('kb-tantandaero', '헤어살롱', 20_000, '07-05'), // 4,000 / 20,000
       ],
       '2026-07',
     );
-    expect(snapshot.totalBenefitCap).toBeNull();
     const alerts = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 20 });
     expect(alerts.filter((a) => a.type === '한도소진임박')).toHaveLength(0);
   });
 
-  it('80% 미만이면 조용하다', () => {
+  it('영역 한도를 다 쓰면 그 영역에 80%·100% 알림이 각각 난다', () => {
+    // 통합 한도가 아니라 **영역별** 한도로 판정한다. 실제 카드는 영역별
+    // 한도를 여러 개 갖기 때문에 통합 한도만 보면 영영 안 울린다.
     const snapshot = buildSnapshot(
-      dp,
-      [base, tx('shinhan-discount-plan', '한국전력공사 전기요금', 20_000, '07-05')], // 2,000
-      '2026-07',
-    );
-    expect(snapshot.totalBenefitCap).toBe(10_000);
-    const alerts = evaluateMonthlyAlerts({ card: dp, snapshot, daysRemaining: 20 });
-    expect(alerts.filter((a) => a.type === '한도소진임박')).toHaveLength(0);
-  });
-
-  it('한도를 다 쓰면 80% 알림과 100% 알림이 각각 난다', () => {
-    const snapshot = buildSnapshot(
-      dp,
+      tantan,
       [
-        base,
-        // 공과금 10%, 건당 한도 5,000원 → 두 건이면 통합 10,000원을 채운다
-        tx('shinhan-discount-plan', '한국전력공사 전기요금', 100_000, '07-05'),
-        tx('shinhan-discount-plan', '도시가스 요금', 100_000, '07-06'),
+        tx('kb-tantandaero', '아방가르드', 900_000, '06-15'), // 80만 구간
+        // 스포츠·미용·결혼 영역 한도 20,000원을 채운다
+        tx('kb-tantandaero', '헤어살롱', 200_000, '07-05'),
       ],
       '2026-07',
     );
-    expect(snapshot.totalBenefitUsed).toBe(10_000);
 
-    const capAlerts = evaluateMonthlyAlerts({ card: dp, snapshot, daysRemaining: 20 }).filter(
+    const capAlerts = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 20 }).filter(
       (a) => a.type === '한도소진임박',
     );
     expect(capAlerts).toHaveLength(2);
     expect(capAlerts.map((a) => a.key)).toEqual([
-      expect.stringContaining('cap_80'),
-      expect.stringContaining('cap_100'),
+      expect.stringContaining('cap_tt-sports-beauty-wedding_80'),
+      expect.stringContaining('cap_tt-sports-beauty-wedding_100'),
     ]);
     expect(capAlerts[1].title).toContain('한도 소진');
+    // 어느 영역인지 제목에 들어가야 한다
+    expect(capAlerts[1].title).toContain('스포츠·미용·결혼');
+  });
+
+  it('영역마다 알림 키가 달라 서로를 막지 않는다', () => {
+    const snapshot = buildSnapshot(
+      tantan,
+      [
+        tx('kb-tantandaero', '아방가르드', 900_000, '06-15'),
+        tx('kb-tantandaero', '헤어살롱', 200_000, '07-05'), // 20,000 소진
+        tx('kb-tantandaero', '신세계백화점', 200_000, '07-06'), // 15,000 소진
+      ],
+      '2026-07',
+    );
+    const keys = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 20 })
+      .filter((a) => a.type === '한도소진임박')
+      .map((a) => a.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys.some((k) => k.includes('tt-sports-beauty-wedding'))).toBe(true);
+    expect(keys.some((k) => k.includes('tt-dept-cvs'))).toBe(true);
   });
 
   it('한도가 없는 카드는 소진 알림 대상이 아니다', () => {

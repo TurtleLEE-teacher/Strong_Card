@@ -91,27 +91,32 @@ export function evaluateMonthlyAlerts({
   }
 
   // --- 3. 혜택 한도 소진 임박 ---
+  //
+  // **영역별로** 판정한다. 실제 카드는 통합 한도 하나가 아니라 영역별
+  // 한도를 여러 개 갖는다(탄탄대로 6개, Discount Plan 4개). 통합 한도만
+  // 보면 어떤 카드에서도 이 알림이 울리지 않는다.
+  //
   // 실적 바와 방향이 반대다. 차오를수록 나쁘다 — 더 써도 혜택이 없다는 뜻.
-  if (snapshot.totalBenefitCap !== null && snapshot.totalBenefitCap > 0) {
-    const ratio = snapshot.totalBenefitUsed / snapshot.totalBenefitCap;
+  for (const usage of snapshot.benefitUsage) {
+    if (usage.cap === null || usage.cap <= 0) continue;
+    const ratio = usage.used / usage.cap;
+
     for (const threshold of CAP_WARNING_RATIOS) {
-      if (ratio >= threshold) {
-        const isFull = threshold === 1;
-        alerts.push({
-          key: `${month}:${cardId}:cap_${Math.round(threshold * 100)}`,
-          type: '한도소진임박',
-          cardId,
-          month,
-          title: isFull
-            ? `${card.shortName} 혜택 한도 소진`
-            : `${card.shortName} 혜택 한도 ${Math.round(ratio * 100)}% 사용`,
-          body: isFull
-            ? `${won(snapshot.totalBenefitCap)}를 다 썼습니다. 이 카드로 더 써도 혜택이 없습니다.`
-            : `${won(snapshot.totalBenefitUsed)} / ${won(snapshot.totalBenefitCap)} 사용. ` +
-              `${won(snapshot.totalBenefitCap - snapshot.totalBenefitUsed)} 남음.`,
-          url,
-        });
-      }
+      if (ratio < threshold) continue;
+      const isFull = threshold === 1;
+      alerts.push({
+        key: `${month}:${cardId}:cap_${usage.ruleId}_${Math.round(threshold * 100)}`,
+        type: '한도소진임박',
+        cardId,
+        month,
+        title: isFull
+          ? `${card.shortName} ${usage.label} 한도 소진`
+          : `${card.shortName} ${usage.label} ${Math.round(ratio * 100)}% 사용`,
+        body: isFull
+          ? `${won(usage.cap)}를 다 썼습니다. 이 영역은 더 써도 혜택이 없습니다.`
+          : `${won(usage.used)} / ${won(usage.cap)} 사용. ${won(usage.cap - usage.used)} 남음.`,
+        url,
+      });
     }
   }
 
