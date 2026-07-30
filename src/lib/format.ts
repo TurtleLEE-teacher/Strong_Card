@@ -26,9 +26,14 @@ function trim(n: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
-/** 0.62 → '62%' */
+/**
+ * 비율을 퍼센트로. 0.62 → '62%', 0.012 → '1.2%'
+ *
+ * 반올림으로 값을 왜곡하지 않는다. 1.2% 적립을 '1%'로 보여주면
+ * 카드 비교가 틀어진다.
+ */
 export function percent(ratio: number): string {
-  return `${Math.round(ratio * 100)}%`;
+  return `${Number((ratio * 100).toFixed(2))}%`;
 }
 
 /** '2026-07' → '2026년 7월' */

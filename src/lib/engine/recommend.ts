@@ -19,6 +19,7 @@ import type {
 } from '@/lib/types';
 import { resolveCap, selectRule } from './benefits';
 import { judgeTransaction } from './performance';
+import { percent } from '@/lib/format';
 
 export interface PurchaseQuery {
   merchant: string;
@@ -184,12 +185,12 @@ export function estimateBenefit(
 }
 
 /**
- * 요율을 표시용 문자열로. 반올림으로 값을 왜곡하지 않는다.
- * 0.012 → '1.2%', 0.2 → '20%', 0.002 → '0.2%'
+ * 요율을 표시용 문자열로.
+ * 포맷 규칙은 format.ts의 percent() 한 곳에만 둔다 — 두 군데서 따로
+ * 반올림하면 같은 값이 화면마다 다르게 보인다.
  */
 export function formatRate(rate: number): string {
-  const pct = rate * 100;
-  return `${Number(pct.toFixed(2))}%`;
+  return percent(rate);
 }
 
 /**
