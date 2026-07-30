@@ -47,10 +47,12 @@ export function UsageRow({
               소진
             </span>
           )}
+          {/* 단위는 분모에만 붙인다. 둘 다 붙이면 좁은 폭에서 줄이 밀리고,
+              아예 없으면 화면의 다른 금액과 표기가 갈린다. */}
           <span className="text-[11px] tabular" style={{ color: 'var(--text-muted)' }}>
             {usage.cap === null
               ? won(usage.used)
-              : `${usage.used.toLocaleString('ko-KR')} / ${usage.cap.toLocaleString('ko-KR')}`}
+              : `${usage.used.toLocaleString('ko-KR')} / ${won(usage.cap)}`}
           </span>
         </span>
       </div>

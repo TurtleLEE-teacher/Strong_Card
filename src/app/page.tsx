@@ -11,7 +11,11 @@ export default async function DashboardPage() {
     await getDashboardData();
 
   const totalBenefit = snapshots.reduce((sum, s) => sum + s.totalBenefitUsed, 0);
-  const totalSpend = snapshots.reduce((sum, s) => sum + s.currentSpend, 0);
+  // '총 사용'은 말 그대로 쓴 돈이다 — 실적 인정액(currentSpend)이 아니다.
+  // 제외분을 빼고 세면 세금·상품권을 쓴 달에 사용액이 실제보다 작게 나오고,
+  // 환원율은 분모가 줄어 부풀려진다. 하이패스 캐시백처럼 제외 거래에도 붙는
+  // 혜택이 분자에는 들어가 있으므로 분모도 같은 기준이어야 한다.
+  const totalSpend = snapshots.reduce((sum, s) => sum + s.currentSpend + s.excludedSpend, 0);
 
   // 실적이 모자란 채로 월말이 가까운 카드 — 대시보드 상단에서 먼저 알린다
   const atRisk = snapshots.filter((s) => {

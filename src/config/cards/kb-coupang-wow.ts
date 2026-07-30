@@ -43,6 +43,18 @@ export const KB_COUPANG_WOW: Card = {
     exclusions: COMMON_EXCLUSIONS,
   },
 
+  /*
+   * 프로모션과 기본 요율은 **겹쳐 쌓는다**(overlay).
+   *
+   * 예전에는 유효기간을 잘라 이어 붙였다 — 프로모션 04-15~10-15, 기본
+   * 10-16부터. 그러면 프로모션 시작 **이전** 날짜에는 어떤 룰도 유효하지
+   * 않아 그 기간 적립이 통째로 0원이 된다.
+   *
+   * 지금은 기본 룰에 유효기간을 두지 않아 항상 살아 있고, 프로모션 룰이
+   * 더 높은 우선순위(작은 priority)로 그 위를 덮는다. selectRule은 매칭되는
+   * 첫 룰 하나만 쓰므로 어느 시점에도 정확히 하나가 적용된다 — 빈틈도
+   * 중복도 생길 수 없다.
+   */
   benefits: [
     // --- 프로모션 (2026-04-15 ~ 2026-10-15) ---
     {
@@ -75,7 +87,7 @@ export const KB_COUPANG_WOW: Card = {
       notes: '기본 0.2% + 추가 1%. 월 한도는 미확인',
     },
 
-    // --- 프로모션 종료 후 기본 ---
+    // --- 기본 요율 (프로모션이 없을 때 적용) ---
     {
       id: 'cw-coupang-base',
       label: '쿠팡 2% 적립',
@@ -83,8 +95,8 @@ export const KB_COUPANG_WOW: Card = {
       rate: 0.02,
       match: { brands: ['COUPANG', 'COUPANG_EATS', 'COUPANG_PLAY'] },
       capPerMonth: 20_000,
-      effectiveFrom: '2026-10-16',
-      priority: 10,
+      // 유효기간 없음 — 항상 살아 있고 프로모션이 위를 덮는다.
+      priority: 11,
       confidence: 'confirmed',
     },
     {
@@ -94,8 +106,8 @@ export const KB_COUPANG_WOW: Card = {
       rate: 0.002,
       match: {},
       capPerMonth: 2_000,
-      effectiveFrom: '2026-10-16',
-      priority: 90,
+      // 유효기간 없음 — 항상 살아 있고 프로모션이 위를 덮는다.
+      priority: 91,
       confidence: 'estimated',
       notes: '월 한도는 미확인',
     },
