@@ -40,19 +40,9 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* 결제 직전에 여는 화면이라 대시보드 맨 위에서 바로 닿아야 한다 */}
-        <div className="mt-4">
-          <Link
-            href="/recommend"
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium"
-            style={{ background: 'var(--surface)', color: 'var(--text-primary)' }}
-          >
-            💳 이 결제, 어느 카드로?
-          </Link>
-        </div>
-
-        {/* 히어로 숫자는 화면당 하나. 이 앱이 존재하는 이유가 이 숫자다. */}
-        <p className="mt-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
+        {/* 히어로 숫자는 화면당 하나. 이 앱이 존재하는 이유가 이 숫자다.
+            큰 숫자에는 tabular를 쓰지 않는다 — 자간이 헐거워 보인다. */}
+        <p className="mt-5 text-xs" style={{ color: 'var(--text-secondary)' }}>
           이번 달 받은 혜택
         </p>
         <p
@@ -61,11 +51,22 @@ export default async function DashboardPage() {
         >
           {won(totalBenefit)}
         </p>
-        <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+        <p className="mt-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
           총 사용 {won(totalSpend)}
           {totalSpend > 0 &&
             ` · 실질 환원율 ${((totalBenefit / totalSpend) * 100).toFixed(1)}%`}
         </p>
+
+        {/* 결제 직전에 여는 화면이다. 이 앱의 주 행동이므로 칩이 아니라
+            폭을 다 쓰는 버튼으로 둔다. */}
+        <Link
+          href="/recommend"
+          className="mt-5 flex items-center justify-between gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-opacity hover:opacity-90"
+          style={{ background: 'var(--text-primary)', color: 'var(--background)' }}
+        >
+          <span>이 결제, 어느 카드로?</span>
+          <span aria-hidden>→</span>
+        </Link>
       </header>
 
       {isDemo && (

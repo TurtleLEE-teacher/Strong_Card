@@ -22,13 +22,15 @@ export function performanceSeverity(
   return 'accent';
 }
 
-/**
- * 혜택 한도 바의 색.
- * 실적 바와 방향이 반대다 — 차오를수록 나쁘다(= 더 써도 혜택이 없다).
+/*
+ * 혜택 한도 바에는 심각도색을 쓰지 않는다 (예전의 benefitSeverity 제거).
+ *
+ * 이유 두 가지.
+ *  1. 뜻이 뒤집힌다. 실적 바의 빨강은 "모자라다", 혜택 바의 빨강은 "다 받았다"다.
+ *     같은 램프로 칠하면 정반대 상태가 같은 색으로 나온다.
+ *  2. 카드 여섯 장의 영역 한도가 대부분 100%에 닿아 화면 전체가 빨개졌고,
+ *     그 바람에 정작 급한 실적 미달 경고가 묻혔다.
+ *
+ * 지금은 혜택 바가 **카드 정체성색**을 쓰고, 소진은 '소진' 라벨로 알린다.
+ * → components/UsageRow.tsx
  */
-export function benefitSeverity(ratio: number | null): MeterSeverity {
-  if (ratio === null) return 'accent';
-  if (ratio >= 1) return 'critical';
-  if (ratio >= 0.8) return 'warning';
-  return 'accent';
-}
