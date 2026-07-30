@@ -40,6 +40,17 @@ export default async function DashboardPage() {
           </div>
         </div>
 
+        {/* 결제 직전에 여는 화면이라 대시보드 맨 위에서 바로 닿아야 한다 */}
+        <div className="mt-4">
+          <Link
+            href="/recommend"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium"
+            style={{ background: 'var(--surface)', color: 'var(--text-primary)' }}
+          >
+            💳 이 결제, 어느 카드로?
+          </Link>
+        </div>
+
         {/* 히어로 숫자는 화면당 하나. 이 앱이 존재하는 이유가 이 숫자다. */}
         <p className="mt-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
           이번 달 받은 혜택

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ACTIVE_CARDS, CARDS_BY_ID } from '@/config/cards';
+import { findMissedBenefits } from '@/lib/engine/recommend';
 import { getDashboardData } from '@/lib/data';
 import { Meter } from '@/components/Meter';
 import { benefitSeverity, performanceSeverity } from '@/lib/severity';
@@ -37,6 +38,10 @@ export default async function CardDetailPage({
       return key === month;
     })
     .sort((a, b) => new Date(b.approvedAt).getTime() - new Date(a.approvedAt).getTime());
+
+  // 이 카드로 결제했지만 다른 카드가 더 나았을 건들
+  const missed = findMissedBenefits(ACTIVE_CARDS, snapshots, monthTx);
+  const missedTotal = missed.reduce((sum, m) => sum + m.delta, 0);
 
   const seriesColor = `var(--series-${card.slot})`;
 
@@ -109,6 +114,47 @@ export default async function CardDetailPage({
           </div>
         )}
       </Panel>
+
+      {/*
+        놓친 혜택 — 이 카드로 결제했지만 다른 카드가 더 나았을 건.
+        추정치임을 반드시 밝힌다. 실제로 다른 카드를 썼다면 그 카드의
+        한도 소진 순서도 달라졌을 테니 이 숫자가 그대로 실현되지는 않는다.
+      */}
+      {missed.length > 0 && (
+        <Panel title={`놓친 혜택 (추정) ${won(missedTotal)}`}>
+          <ul className="divide-y" style={{ borderColor: 'var(--border)' }}>
+            {missed.slice(0, 10).map((m) => (
+              <li key={m.transactionId} className="flex items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px]" style={{ color: 'var(--text-primary)' }}>
+                    {m.merchant}
+                  </p>
+                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    {dateTimeShort(m.approvedAt)} · {m.bestCardName}
+                    {m.bestRuleLabel && `의 ${m.bestRuleLabel}`}였다면
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p
+                    className="text-[13px] font-semibold tabular"
+                    style={{ color: 'var(--status-serious)' }}
+                  >
+                    +{won(m.delta)}
+                  </p>
+                  <p className="text-[11px] tabular" style={{ color: 'var(--text-muted)' }}>
+                    {won(m.actualBenefit)} → {won(m.bestBenefit)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+            월말 시점의 남은 한도를 기준으로 계산한 <strong>추정치</strong>입니다. 실제로 다른
+            카드를 썼다면 그 카드의 한도 소진 순서도 달라지므로 이 금액이 그대로 실현되지는
+            않습니다.
+          </p>
+        </Panel>
+      )}
 
       {/* 대시보드 위젯은 상위 4개만 보여주므로, 전체는 여기서 확인한다 */}
       {snapshot.benefitUsage.length > 0 && (
