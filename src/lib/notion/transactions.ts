@@ -124,6 +124,7 @@ export function toTransaction(page: PageObjectResponse, fx: FxOptions = {}): Tra
     canceled: checkboxValue(props, PROP.canceled),
     rawMessage,
     issuerCumulative: extractIssuerCumulative(rawMessage),
+    alertStatus: selectValue(props, PROP.alertStatus) as Transaction['alertStatus'],
   };
 }
 

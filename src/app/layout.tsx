@@ -8,7 +8,14 @@ const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin']
 export const metadata: Metadata = {
   title: 'Strong Card',
   description: '카드별 전월실적과 혜택 한도를 한눈에',
+  manifest: '/manifest.webmanifest',
+  // iOS는 홈 화면에 추가된 상태에서만 Web Push를 허용한다.
+  // 이 설정이 없으면 알림 자체가 불가능하다.
   appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Strong Card' },
+  icons: {
+    icon: '/icon-192.png',
+    apple: '/icon-192.png',
+  },
 };
 
 export const viewport: Viewport = {

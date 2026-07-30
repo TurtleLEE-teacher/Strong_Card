@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { CARDS_BY_ID } from '@/config/cards';
 import { CardWidget } from '@/components/CardWidget';
 import { getDashboardData } from '@/lib/data';
@@ -25,9 +26,18 @@ export default async function DashboardPage() {
           <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
             {monthLabel(month)}
           </h1>
-          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            {daysRemaining === 0 ? '오늘이 말일' : `${daysRemaining}일 남음`}
-          </p>
+          <div className="flex items-baseline gap-3">
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {daysRemaining === 0 ? '오늘이 말일' : `${daysRemaining}일 남음`}
+            </p>
+            <Link
+              href="/settings"
+              className="text-xs hover:underline"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              설정
+            </Link>
+          </div>
         </div>
 
         {/* 히어로 숫자는 화면당 하나. 이 앱이 존재하는 이유가 이 숫자다. */}

@@ -43,6 +43,7 @@ function tx(partial: Partial<Transaction>): Transaction {
     canceled: partial.canceled ?? false,
     rawMessage: partial.rawMessage ?? null,
     issuerCumulative: partial.issuerCumulative ?? null,
+    alertStatus: partial.alertStatus ?? null,
   };
 }
 

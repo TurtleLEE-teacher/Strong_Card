@@ -36,6 +36,7 @@ function make(
     canceled: false,
     rawMessage: null,
     issuerCumulative: null,
+    alertStatus: null,
   };
 }
 
