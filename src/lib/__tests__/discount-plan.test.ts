@@ -38,7 +38,10 @@ function txAt(title: string, krwAmount: number, day: string, kstHourValue: numbe
   };
 }
 
-/** 60만 구간을 만들어 주는 지난달 실적 */
+/**
+ * 40만 구간(40만 이상 80만 미만)을 만들어 주는 지난달 실적.
+ * Time Plan 한도 5,000 / Daily Plan 10,000 / 정기결제 3,000 / 영화 5,000.
+ */
 const PREV_MONTH = txAt('아무데나', 700_000, '2026-06-15', 12);
 
 describe('KST 시각 유틸', () => {
@@ -65,8 +68,9 @@ describe('KST 시각 유틸', () => {
 
 describe('Discount Plan 시간대 할인', () => {
   it('카페는 07~15시에만 할인된다', () => {
+    // 20,000 × 10% = 2,000이지만 Time Plan은 건당 1,000원까지다
     const inWindow = buildSnapshot(dp, [PREV_MONTH, txAt('스타벅스 강남점', 20_000, '2026-07-10', 12)], '2026-07');
-    expect(inWindow.totalBenefitUsed).toBe(2_000); // 10%
+    expect(inWindow.totalBenefitUsed).toBe(1_000);
 
     const outWindow = buildSnapshot(dp, [PREV_MONTH, txAt('스타벅스 강남점', 20_000, '2026-07-10', 16)], '2026-07');
     expect(outWindow.totalBenefitUsed).toBe(0);
@@ -74,7 +78,7 @@ describe('Discount Plan 시간대 할인', () => {
 
   it('편의점은 18~22시에만 할인된다', () => {
     const inWindow = buildSnapshot(dp, [PREV_MONTH, txAt('GS25 역삼점', 20_000, '2026-07-10', 19)], '2026-07');
-    expect(inWindow.totalBenefitUsed).toBe(2_000);
+    expect(inWindow.totalBenefitUsed).toBe(1_000);
 
     const outWindow = buildSnapshot(dp, [PREV_MONTH, txAt('GS25 역삼점', 20_000, '2026-07-10', 12)], '2026-07');
     expect(outWindow.totalBenefitUsed).toBe(0);
@@ -85,7 +89,20 @@ describe('Discount Plan 시간대 할인', () => {
     const lunch = buildSnapshot(dp, [PREV_MONTH, txAt('CU 편의점', 30_000, '2026-07-10', 13)], '2026-07');
     const night = buildSnapshot(dp, [PREV_MONTH, txAt('CU 편의점', 30_000, '2026-07-10', 20)], '2026-07');
     expect(lunch.totalBenefitUsed).toBe(0);
-    expect(night.totalBenefitUsed).toBe(3_000);
+    expect(night.totalBenefitUsed).toBe(1_000);
+  });
+
+  it('영역별로 하루 1회만 할인된다', () => {
+    const snapshot = buildSnapshot(
+      dp,
+      [
+        PREV_MONTH,
+        txAt('스타벅스', 20_000, '2026-07-10', 9),
+        txAt('투썸플레이스', 20_000, '2026-07-10', 13),
+      ],
+      '2026-07',
+    );
+    expect(snapshot.totalBenefitUsed).toBe(1_000);
   });
 
   it('UTC로 판정하면 틀리는 경계 시각을 KST로 올바로 본다', () => {
@@ -93,7 +110,7 @@ describe('Discount Plan 시간대 할인', () => {
     const tx = txAt('스타벅스', 20_000, '2026-07-10', 8);
     expect(tx.approvedAt).toContain('2026-07-09T23:00');
     const snapshot = buildSnapshot(dp, [PREV_MONTH, tx], '2026-07');
-    expect(snapshot.totalBenefitUsed).toBe(2_000);
+    expect(snapshot.totalBenefitUsed).toBe(1_000);
   });
 });
 
@@ -111,7 +128,7 @@ describe('Discount Plan 공과금 할인', () => {
     const result = computeBenefits({
       card: dp,
       transactions: [utility],
-      appliedTier: dp.performance.tiers[2], // 60만 구간
+      appliedTier: dp.performance.tiers[3], // 120만 구간 (정기결제 한도 10,000)
       verdicts: perf.verdicts,
       month: '2026-07',
     });
@@ -126,7 +143,8 @@ describe('Discount Plan 공과금 할인', () => {
       amount: 80_000,
       at: '2026-07-15T03:00:00Z',
     });
-    expect(result.expectedBenefit).toBe(5_000);
+    // 80,000 × 10% = 8,000 → 건당 5,000 → 40만 구간 정기결제 한도 3,000
+    expect(result.expectedBenefit).toBe(3_000);
     expect(result.ruleLabel).toContain('공과금');
   });
 
@@ -159,22 +177,190 @@ describe('Discount Plan 디지털구독', () => {
   });
 });
 
-describe('브랜드 사전 확장', () => {
-  it('새로 추가한 카페 브랜드가 인식된다', () => {
-    const snapshot = buildSnapshot(
+describe('Discount Plan 대상 가맹점은 약관에 열거된 것뿐이다', () => {
+  it('지정 6개 카페만 할인된다', () => {
+    const listed = buildSnapshot(
+      dp,
+      [PREV_MONTH, txAt('폴바셋 선릉점', 20_000, '2026-07-10', 11)],
+      '2026-07',
+    );
+    expect(listed.totalBenefitUsed).toBe(1_000);
+
+    // 할리스는 약관 목록에 없다. 일반 카페 브랜드를 다 넣으면 과다 계상된다.
+    const unlisted = buildSnapshot(
       dp,
       [PREV_MONTH, txAt('할리스커피 선릉점', 20_000, '2026-07-10', 11)],
       '2026-07',
     );
-    expect(snapshot.totalBenefitUsed).toBe(2_000);
+    expect(unlisted.totalBenefitUsed).toBe(0);
   });
 
-  it('새로 추가한 편의점 브랜드가 인식된다', () => {
-    const snapshot = buildSnapshot(
+  it('편의점은 CU·GS25·세븐일레븐·이마트24만 대상이다', () => {
+    const listed = buildSnapshot(
+      dp,
+      [PREV_MONTH, txAt('GS25 역삼점', 20_000, '2026-07-10', 20)],
+      '2026-07',
+    );
+    expect(listed.totalBenefitUsed).toBe(1_000);
+
+    // 미니스톱은 약관 목록에 없다
+    const unlisted = buildSnapshot(
       dp,
       [PREV_MONTH, txAt('미니스톱 역삼점', 20_000, '2026-07-10', 20)],
       '2026-07',
     );
-    expect(snapshot.totalBenefitUsed).toBe(2_000);
+    expect(unlisted.totalBenefitUsed).toBe(0);
+  });
+
+  it('영화 예매는 정액 5,000원 할인이다', () => {
+    const snapshot = buildSnapshot(
+      dp,
+      [PREV_MONTH, txAt('CGV 강남', 15_000, '2026-07-10', 19)],
+      '2026-07',
+    );
+    expect(snapshot.totalBenefitUsed).toBe(5_000);
+  });
+
+  it('영화 예매는 12,000원 미만이면 할인되지 않는다', () => {
+    const snapshot = buildSnapshot(
+      dp,
+      [PREV_MONTH, txAt('CGV 강남', 11_000, '2026-07-10', 19)],
+      '2026-07',
+    );
+    expect(snapshot.totalBenefitUsed).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Amex Blue 해외 결제 — 전월실적 조건이 없는 유일한 혜택
+// ---------------------------------------------------------------------------
+
+describe('Amex Blue 해외 결제 5% 적립', () => {
+  const amex = CARDS_BY_ID['samsung-amex-blue'];
+
+  function overseasTx(krwAmount: number): Transaction {
+    return {
+      ...txAt('ANTHROPIC,PBC', krwAmount, '2026-07-10', 12),
+      cardId: 'samsung-amex-blue',
+      issuer: '삼성',
+      last4: '2055',
+      paymentKind: '해외',
+      currency: 'USD',
+    };
+  }
+
+  it('실적이 0원이어도 해외 적립은 나온다', () => {
+    // 이 카드에서 해외 적립만 전월실적과 무관하다. 통합 한도를 두면
+    // 실적 미달일 때 이 적립까지 0원이 되어버린다.
+    const snapshot = buildSnapshot(amex, [overseasTx(100_000)], '2026-07');
+    expect(snapshot.previousSpend).toBe(0);
+    expect(snapshot.appliedTier?.threshold).toBe(0);
+    expect(snapshot.totalBenefitUsed).toBe(5_000); // 5%
+  });
+
+  it('국내 결제에는 해외 룰이 붙지 않는다', () => {
+    const snapshot = buildSnapshot(
+      amex,
+      [txAt('아무데나', 100_000, '2026-07-10', 12)],
+      '2026-07',
+    );
+    // 실적 미달이라 국내 혜택은 전부 0원
+    expect(snapshot.totalBenefitUsed).toBe(0);
+  });
+
+  it('해외 적립은 월 3만 포인트에서 잘린다', () => {
+    const snapshot = buildSnapshot(amex, [overseasTx(1_000_000)], '2026-07');
+    expect(snapshot.totalBenefitUsed).toBe(30_000);
+  });
+
+  it('실적을 채우면 국내 혜택도 함께 잡힌다', () => {
+    const snapshot = buildSnapshot(
+      amex,
+      [
+        { ...txAt('아무데나', 400_000, '2026-06-15', 12), cardId: 'samsung-amex-blue' },
+        { ...txAt('스타벅스', 20_000, '2026-07-10', 12), cardId: 'samsung-amex-blue' },
+        overseasTx(100_000),
+      ],
+      '2026-07',
+    );
+    // 스벅 20% 4,000 + 해외 5% 5,000
+    expect(snapshot.totalBenefitUsed).toBe(9_000);
+  });
+});
+
+/**
+ * Plan Day — 매월 1일 첫 할인 거래 2배.
+ *
+ * 약관에 실린 예시(5월 1일)를 그대로 재현한다. 이 예시가 사양의 정본이다.
+ *   10시 올리브영(잡화) 3만원  → Plan Day 20%
+ *   13시 스타벅스(커피) 5천원  → Plan Day 20%
+ *   14시 S-OIL(주유)   5만원  → Daily Plan 5% (Daily 보너스는 이미 소진)
+ *   17시 다이소(잡화)   2만원  → 할인 제외 (일 1회 한도 초과)
+ */
+describe('Plan Day (매월 1일 요율 2배)', () => {
+  // 120만 구간 — Time Plan 15,000 / Daily Plan 30,000. 한도가 예시를 가리지 않도록.
+  function run(txs: Transaction[], tierIndex = 3) {
+    return computeBenefits({
+      card: dp,
+      transactions: txs,
+      appliedTier: dp.performance.tiers[tierIndex],
+      month: '2026-07',
+    });
+  }
+
+  const oliveyoung = txAt('올리브영 명동점', 30_000, '2026-07-01', 10);
+  const starbucks = txAt('스타벅스 강남점', 5_000, '2026-07-01', 13);
+  const soil = txAt('에쓰오일 방배주유소', 50_000, '2026-07-01', 14);
+  const daiso = txAt('다이소 홍대점', 20_000, '2026-07-01', 17);
+
+  it('약관 예시를 그대로 재현한다', () => {
+    const result = run([oliveyoung, starbucks, soil, daiso]);
+    const by = (id: string) => result.appliedBenefits.find((b) => b.transactionId === id);
+
+    // 잡화 10% → Plan Day 20%. 이용금액 5만원 상한 안이므로 3만원 전액에 붙는다.
+    expect(by(oliveyoung.id)?.netAmount).toBe(6_000);
+    // 커피 10% → Plan Day 20%. Time Plan은 서비스가 달라 보너스를 따로 쓴다.
+    expect(by(starbucks.id)?.netAmount).toBe(1_000);
+    // Daily Plan 보너스는 올리브영이 이미 썼다. 주유는 기본 5%.
+    expect(by(soil.id)?.netAmount).toBe(2_500);
+    // 잡화는 일 1회 한도를 올리브영이 소진했다.
+    expect(by(daiso.id)).toBeUndefined();
+  });
+
+  it('서비스마다 1회씩, 월 최대 2회만 2배가 된다', () => {
+    const result = run([oliveyoung, starbucks, soil, daiso]);
+    // 2배가 붙은 건 올리브영(Daily)·스타벅스(Time) 두 건뿐이다.
+    expect(by2(result, oliveyoung.id)).toBe(6_000); // 30,000 × 20%
+    expect(by2(result, starbucks.id)).toBe(1_000); // 5,000 × 20%
+    expect(by2(result, soil.id)).toBe(2_500); // 50,000 × 5% — 2배 아님
+  });
+
+  it('1일이 아니면 2배가 붙지 않는다', () => {
+    const second = txAt('올리브영 명동점', 30_000, '2026-07-02', 10);
+    const result = run([second]);
+    // 잡화 기본 10% → 3,000원
+    expect(by2(result, second.id)).toBe(3_000);
+  });
+
+  it('KST 기준으로 판정한다 — 1일 오전 8시는 아직 1일이다', () => {
+    // 2026-07-01 08:00 KST = 2026-06-30 23:00 UTC. UTC로 보면 전달 말일이다.
+    const early = txAt('올리브영 명동점', 30_000, '2026-07-01', 8);
+    expect(early.approvedAt).toBe('2026-06-30T23:00:00.000Z');
+    expect(by2(run([early]), early.id)).toBe(6_000);
+  });
+
+  it('한도에 걸려 0원이 된 거래는 보너스를 태우지 않는다', () => {
+    // 40만 구간: Daily Plan 한도 10,000. 큰 거래로 먼저 한도를 소진시킨다.
+    const bigMart = txAt('이마트 성수점', 50_000, '2026-07-01', 9); // 마트 10%→20%, 5만 상한
+    const later = txAt('올리브영 명동점', 30_000, '2026-07-01', 10);
+    const result = run([bigMart, later], 1);
+    // 첫 거래가 Daily 보너스를 쓰고 한도 10,000을 그대로 소진한다.
+    expect(by2(result, bigMart.id)).toBe(10_000);
+    // 뒤 거래는 남은 한도가 0이라 0원 — 보너스는 이미 앞에서 소진됐다.
+    expect(by2(result, later.id)).toBe(0);
+  });
+});
+
+function by2(result: ReturnType<typeof computeBenefits>, txId: string): number | undefined {
+  return result.appliedBenefits.find((b) => b.transactionId === txId)?.netAmount;
+}

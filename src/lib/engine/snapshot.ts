@@ -92,6 +92,7 @@ export function buildSnapshot(
     totalBenefitUsed: benefits.totalUsed,
     totalBenefitCap: benefits.totalCap,
 
+    ruleCounts: benefits.ruleCounts,
     unmatchedTransactionIds: benefits.unmatchedTransactionIds,
     transactionCount: current.length,
   };

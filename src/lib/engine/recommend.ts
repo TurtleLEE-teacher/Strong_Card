@@ -17,7 +17,7 @@ import type {
   Transaction,
   TxCategory,
 } from '@/lib/types';
-import { resolveCap, selectRule } from './benefits';
+import { resolveCap, selectRule, UsageCounters } from './benefits';
 import { judgeTransaction } from './performance';
 import { percent } from '@/lib/format';
 
@@ -59,6 +59,47 @@ export interface Recommendation {
   performanceNote: string | null;
 }
 
+/**
+ * 스냅샷에 기록된 월별 적용 횟수를 카운터로 복원한다.
+ * 일 단위 제한은 조회 시점의 '오늘' 기록이 없으므로 반영하지 않는다 —
+ * 과소 추천보다 과다 추천이 덜 위험한 쪽이라 월 제한만 본다.
+ */
+function restoreCounters(card: Card, snapshot: CardMonthlySnapshot): UsageCounters {
+  const counters = new UsageCounters();
+  for (const rule of card.benefits) {
+    const used = snapshot.ruleCounts?.[rule.id] ?? 0;
+    for (let i = 0; i < used; i += 1) {
+      counters.record(rule, {
+        ...EMPTY_TX,
+        // 서로 다른 날짜로 기록해 일 단위 제한에 걸리지 않게 한다
+        approvedAt: new Date(Date.UTC(2000, 0, 1 + i)).toISOString(),
+      });
+    }
+  }
+  return counters;
+}
+
+/** restoreCounters 전용 더미 거래 */
+const EMPTY_TX: Transaction = {
+  id: '__counter__',
+  title: '',
+  merchant: null,
+  rawAmount: 0,
+  currency: 'KRW',
+  krwAmount: 0,
+  approvedAt: '2000-01-01T00:00:00.000Z',
+  issuer: null,
+  last4: null,
+  cardId: null,
+  category: null,
+  paymentKind: null,
+  installmentMonths: null,
+  canceled: false,
+  rawMessage: null,
+  issuerCumulative: null,
+  alertStatus: null,
+};
+
 /** 조회를 계산 엔진이 이해하는 가짜 거래로 바꾼다. */
 function toPseudoTransaction(query: PurchaseQuery): Transaction {
   return {
@@ -89,7 +130,10 @@ function remainingRuleCap(
 ): number | null {
   const cap = resolveCap(rule.capPerMonth, snapshot.appliedTier);
   if (cap === null) return null;
-  const usage = snapshot.benefitUsage.find((u) => u.ruleId === rule.id);
+  // 한도를 공유하는 룰은 usage가 capGroup 키로 합쳐져 있다. ruleId로만
+  // 찾으면 이미 쓴 금액을 못 보고 남은 한도를 통째로 있다고 착각한다.
+  const key = rule.capGroup ?? rule.id;
+  const usage = snapshot.benefitUsage.find((u) => u.ruleId === key);
   return Math.max(0, cap - (usage?.used ?? 0));
 }
 
@@ -109,7 +153,10 @@ export function estimateBenefit(
   query: PurchaseQuery,
 ): Recommendation {
   const pseudo = toPseudoTransaction(query);
-  const rule = selectRule(card, pseudo, snapshot.appliedTier);
+  // 이번 달 이미 소진한 횟수를 반영해 룰을 고른다. 이게 없으면
+  // 월 5회를 다 쓴 편의점 할인을 계속 추천하게 된다.
+  const counters = restoreCounters(card, snapshot);
+  const rule = selectRule(card, pseudo, snapshot.appliedTier, counters);
 
   const base: Omit<Recommendation, 'reason' | 'performanceNote'> = {
     cardId: card.id,
@@ -138,6 +185,17 @@ export function estimateBenefit(
     };
   }
 
+  // 실적 미달이면 그 사실을 먼저 말한다.
+  // 이 검사가 없으면 "통합 한도를 이미 다 썼습니다"로 나온다 — 한도 계산상
+  // 틀린 말은 아니지만, 사용자가 해야 할 일(실적 채우기)을 가린다.
+  if (card.performance.required && (snapshot.appliedTier?.threshold ?? 0) === 0) {
+    return {
+      ...base,
+      reason: '전월 실적 미달로 혜택이 적용되지 않습니다',
+      performanceNote,
+    };
+  }
+
   // 세금·상품권 같은 제외 항목에는 혜택이 붙지 않는다.
   // 이 검사를 빼먹으면 catch-all 룰(쿠팡와우 그 외 1.2%, ZERO 전 가맹점 1%)이
   // 지방세 결제에 달라붙어 "세금은 쿠팡와우로!"라고 권하게 된다.
@@ -152,8 +210,14 @@ export function estimateBenefit(
   }
 
   const gross = Math.floor(query.amount * rule.rate);
-  let amount = gross;
-  let cappedBy: Recommendation['cappedBy'] = 'none';
+  // '할인 전 이용금액' 상한. 추천도 원장과 같은 식으로 깎아야 화면 두 곳이
+  // 서로 다른 금액을 말하지 않는다.
+  const eligibleAmount =
+    rule.maxEligibleAmountPerTx !== undefined
+      ? Math.min(query.amount, rule.maxEligibleAmountPerTx)
+      : query.amount;
+  let amount = Math.floor(eligibleAmount * rule.rate);
+  let cappedBy: Recommendation['cappedBy'] = amount < gross ? 'per-tx' : 'none';
 
   if (rule.capPerTx !== undefined && amount > rule.capPerTx) {
     amount = rule.capPerTx;

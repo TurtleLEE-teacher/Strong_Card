@@ -4,7 +4,8 @@ import { ACTIVE_CARDS, CARDS_BY_ID } from '@/config/cards';
 import { findMissedBenefits } from '@/lib/engine/recommend';
 import { getDashboardData } from '@/lib/data';
 import { Meter } from '@/components/Meter';
-import { benefitSeverity, performanceSeverity } from '@/lib/severity';
+import { UsageRow } from '@/components/UsageRow';
+import { performanceSeverity } from '@/lib/severity';
 import { dateTimeShort, monthLabel, monthShort, won, wonShort } from '@/lib/format';
 import { previousMonthKey } from '@/lib/date';
 import type { CardId } from '@/lib/types';
@@ -161,32 +162,12 @@ export default async function CardDetailPage({
         <Panel title="혜택별 소진 현황">
           <ul className="space-y-3">
             {snapshot.benefitUsage.map((usage) => (
-              <li key={usage.ruleId}>
-                <div className="mb-1 flex items-baseline justify-between gap-2">
-                  <span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-                    {usage.label}
-                    {usage.txCount > 0 && (
-                      <span style={{ color: 'var(--text-muted)' }}> · {usage.txCount}건</span>
-                    )}
-                  </span>
-                  <span
-                    className="shrink-0 text-[11px] tabular"
-                    style={{ color: 'var(--text-muted)' }}
-                  >
-                    {usage.cap === null
-                      ? won(usage.used)
-                      : `${usage.used.toLocaleString('ko-KR')} / ${usage.cap.toLocaleString('ko-KR')}`}
-                  </span>
-                </div>
-                {usage.cap !== null && (
-                  <Meter
-                    height={6}
-                    ratio={usage.ratio ?? 0}
-                    severity={benefitSeverity(usage.ratio)}
-                    ariaLabel={`${usage.label} ${won(usage.used)} / 한도 ${won(usage.cap)}`}
-                  />
-                )}
-              </li>
+              <UsageRow
+                key={usage.ruleId}
+                usage={usage}
+                seriesColor={seriesColor}
+                showCount
+              />
             ))}
           </ul>
         </Panel>

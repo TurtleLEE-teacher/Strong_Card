@@ -5,13 +5,16 @@ import { COMMON_EXCLUSIONS } from '../exclusions';
 /**
  * 현대카드 ZERO Edition2 (포인트형)
  *
- * 전월실적 없음, 적립한도 없음. 이 앱에서 유일하게 바(bar)가 성립하지 않는 카드다.
- * (분모가 없으니 진행률이 정의되지 않는다 → UI에서 숫자만 표시한다)
+ * 전월실적 없음, 적립한도 없음(1회·월·연간 모두). 이 앱에서 유일하게
+ * 바(bar)가 성립하지 않는 카드다 — 분모가 없으니 진행률이 정의되지 않는다.
  *
- * 국내·외 모든 가맹점 1% / 생활 필수 영역 2.5%
- * https://www.hyundaicard.com/upload/card/20201124_ZERO-Edition2포인트형.pdf
+ *   국내외 전 가맹점  1%   M포인트
+ *   생활 필수 영역   2.5%  M포인트
  *
- * 요율 출처: 전 가맹점 1% / 생활 2.5%, 한도 없음 확인.
+ * 생활 필수 영역: 편의점(현장결제만), 대형마트, 통신, 주유, 학원, 병원, 약국
+ *
+ * 출처: 현대카드 상품 가이드북
+ * https://www.hyundaicard.com/upload/card/20210329_ZERO-Edition2%20포인트형.pdf
  */
 export const HYUNDAI_ZERO_ED2: Card = {
   id: 'hyundai-zero-ed2',
@@ -43,13 +46,14 @@ export const HYUNDAI_ZERO_ED2: Card = {
       rate: 0.025,
       match: {
         brands: [
+          ...BRAND_GROUPS.CONVENIENCE, // 현장 결제만 대상
           ...BRAND_GROUPS.MART,
-          ...BRAND_GROUPS.CONVENIENCE,
           ...BRAND_GROUPS.TELECOM,
           ...BRAND_GROUPS.FUEL,
-          ...BRAND_GROUPS.LIVING,
+          'PHARMACY',
         ],
-        categories: ['생활', '교통'],
+        keywords: ['학원', '병원', '의원', '약국'],
+        categories: ['생활', '의료', '교육'],
       },
       capPerMonth: null, // 한도 없음
       priority: 10,

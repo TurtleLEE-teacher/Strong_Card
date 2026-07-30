@@ -23,6 +23,7 @@ export const BRAND_ALIASES: Record<string, string[]> = {
   MEGA_COFFEE: ['메가엠지씨커피', '메가커피', 'MEGAMGC'],
   COMPOSE: ['컴포즈커피', '컴포즈'],
   PAIK_COFFEE: ['빽다방'],
+  PAULBASSETT: ['폴바셋', 'PAULBASSETT'],
 
   // 편의점
   CU: ['CU', '씨유', 'BGF리테일'],
@@ -34,6 +35,7 @@ export const BRAND_ALIASES: Record<string, string[]> = {
   BAEMIN: ['배달의민족', '우아한형제들', '배민'],
   COUPANG_EATS: ['쿠팡이츠'],
   YOGIYO: ['요기요'],
+  DDANGYO: ['땡겨요'],
 
   // 쿠팡
   COUPANG: ['쿠팡', 'COUPANG', '쿠팡페이'],
@@ -41,6 +43,7 @@ export const BRAND_ALIASES: Record<string, string[]> = {
 
   // 대형마트·백화점
   EMART: ['이마트'],
+  TRADERS: ['트레이더스', '이마트트레이더스'],
   HOMEPLUS: ['홈플러스'],
   LOTTE_MART: ['롯데마트'],
   SHINSEGAE_DEPT: ['신세계백화점'],
@@ -60,6 +63,7 @@ export const BRAND_ALIASES: Record<string, string[]> = {
   KORAIL: ['코레일', '한국철도공사'],
   TMONEY: ['티머니', 'TMONEY'],
   KAKAO_T: ['카카오T', '카카오모빌리티'],
+  SOCAR: ['쏘카', 'SOCAR'],
 
   // 주유
   SK_ENERGY: ['SK에너지', 'SK주유소'],
@@ -119,6 +123,8 @@ export const BRAND_ALIASES: Record<string, string[]> = {
   DAISO: ['다이소', 'DAISO'],
   OLIVEYOUNG: ['올리브영', 'OLIVEYOUNG'],
   MUSINSA: ['무신사', 'MUSINSA'],
+  TWENTYNINECM: ['29CM', '이십구센티미터'],
+  NAVER_STORE: ['네이버플러스스토어', '네이버쇼핑', '네이버스토어'],
   SSG: ['SSG닷컴', '에스에스지'],
   GMARKET: ['지마켓', 'GMARKET'],
   ELEVENST: ['11번가'],
@@ -233,6 +239,16 @@ export const BRAND_GROUPS = {
   LIVING: ['DAISO', 'OLIVEYOUNG'],
   FRESH_DELIVERY: ['KURLY', 'OASIS'],
   UTILITY: ['KEPCO_BILL', 'CITY_GAS', 'WATER_BILL', 'APT_FEE'],
+  /** 신한 Discount Plan Time Plan 카페 영역 (지정 6개 브랜드만) */
+  DP_CAFE: [
+    'STARBUCKS', 'TWOSOME', 'PAULBASSETT', 'COFFEEBEAN', 'MEGA_COFFEE', 'EDIYA',
+  ],
+  /** 신한 Discount Plan Daily Plan 온라인쇼핑 (지정 5개만) */
+  DP_ONLINE: ['NAVER_STORE', 'COUPANG', 'SSG', 'MUSINSA', 'TWENTYNINECM'],
+  /** 신한 Discount Plan Daily Plan 마트 (창고형·기업형 슈퍼 제외) */
+  DP_MART: ['EMART', 'TRADERS', 'LOTTE_MART'],
+  /** 온라인서점 */
+  BOOKSTORE: ['KYOBO', 'YES24'],
 } as const;
 
 /**

@@ -125,6 +125,11 @@ export interface TierCap {
 }
 
 export interface MerchantMatcher {
+  /**
+   * 결제 구분으로 매칭한다. 가맹점과 무관한 혜택에 쓴다.
+   * 예: Amex Blue의 해외 결제 5% 적립은 어느 가맹점이든 해외이기만 하면 된다.
+   */
+  paymentKinds?: PaymentKind[];
   /** 정규화된 브랜드 키 (config/merchants.ts) */
   brands?: string[];
   /** 브랜드 매칭 실패 시 쓰는 Notion 카테고리 폴백 */
@@ -164,6 +169,28 @@ export interface BenefitRule {
   match: MerchantMatcher;
   /** 승인 시각 조건. 없으면 시간 무관. */
   timeWindow?: TimeWindow;
+  /**
+   * 적용 요일 (KST, 0=일 … 6=토). 없으면 요일 무관.
+   * 예: 신한EV 3대마트 할인은 주말에만 적용된다.
+   */
+  daysOfWeek?: number[];
+  /**
+   * 월 최대 적용 횟수. 카드사는 금액 한도와 별개로 횟수를 제한하는 일이 잦다.
+   * 예: 신한EV 편의점 할인은 월 5회까지.
+   */
+  maxCountPerMonth?: number;
+  /** 일 최대 적용 횟수. 예: 신한EV 커피 할인은 하루 1회. */
+  maxCountPerDay?: number;
+  /**
+   * 여러 룰이 하나의 월 한도를 나눠 쓸 때의 그룹 키.
+   *
+   * 신한EV 생활서비스는 6개 영역이 **통합 3만원** 한도를 공유한다. 룰을
+   * 영역별로 쪼개면서 각자 capPerMonth를 주면 한도가 6배로 부풀어 오른다.
+   * 같은 capGroup을 달면 소진량을 합산해 하나의 한도로 계산한다.
+   */
+  capGroup?: string;
+  /** 화면에 그룹을 하나로 묶어 보여줄 때 쓸 이름 */
+  capGroupLabel?: string;
   /** 이 룰의 숫자 출처. 기본 'estimated'. */
   confidence?: RuleConfidence;
   /** 할인·적립률. 0.2 = 20% */
@@ -172,6 +199,24 @@ export interface BenefitRule {
   minAmountPerTx?: number;
   /** 건당 혜택 한도 */
   capPerTx?: number;
+  /**
+   * 요율을 적용할 **할인 전 이용금액**의 상한.
+   *
+   * capPerTx와 다르다. capPerTx는 "할인액 N원까지", 이 값은 "이용금액 N원까지".
+   * 평상시에는 둘이 같은 결과를 내지만(1만원 × 10% = 1,000원), 요율이 바뀌는
+   * 순간 갈라진다. 신한 Discount Plan 약관은 "할인 전 이용금액 1회 1만원까지"로
+   * 쓰여 있으므로 이쪽이 원문에 맞고, Plan Day로 요율이 2배가 되면 할인액
+   * 상한도 함께 2배가 된다.
+   */
+  maxEligibleAmountPerTx?: number;
+  /**
+   * 매월 특정 일자에 요율을 배수만큼 올리는 보너스.
+   *
+   * 신한 Discount Plan의 **Plan Day** — 매월 1일, Time Plan·Daily Plan
+   * 각 서비스의 **첫 할인 거래 1건**에만 요율 2배. capGroup 단위로 1회씩
+   * 소진되며, 기존 월 한도·일월 횟수 한도 안에서 제공된다.
+   */
+  bonusDay?: { dayOfMonth: number; multiplier: number };
   /** 월 혜택 한도. 구간에 따라 달라지면 TierCap[]. null/undefined면 무제한. */
   capPerMonth?: number | TierCap[] | null;
   /** 이 룰이 유효한 시작일 (YYYY-MM-DD, 포함) */
@@ -235,6 +280,8 @@ export interface AppliedBenefit {
 /** 혜택 룰별 월 소진 현황 */
 export interface BenefitUsage {
   ruleId: string;
+  /** 여러 룰이 한 한도를 공유하면 그 그룹 키. 화면에서 한 줄로 합친다. */
+  capGroup?: string;
   label: string;
   type: 'discount' | 'point';
   used: number;
@@ -284,6 +331,11 @@ export interface CardMonthlySnapshot {
   /** appliedTier의 통합 한도. null이면 무제한. */
   totalBenefitCap: number | null;
 
+  /**
+   * 룰별 이번 달 적용 횟수. 횟수 제한이 있는 혜택을 추천할 때 참조한다.
+   * 이게 없으면 월 5회를 이미 다 쓴 혜택을 계속 추천하게 된다.
+   */
+  ruleCounts: Record<string, number>;
   /** 혜택 매칭에 실패한 거래 (미분류 관리 화면에서 쓴다) */
   unmatchedTransactionIds: string[];
   transactionCount: number;

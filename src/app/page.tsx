@@ -11,7 +11,11 @@ export default async function DashboardPage() {
     await getDashboardData();
 
   const totalBenefit = snapshots.reduce((sum, s) => sum + s.totalBenefitUsed, 0);
-  const totalSpend = snapshots.reduce((sum, s) => sum + s.currentSpend, 0);
+  // '총 사용'은 말 그대로 쓴 돈이다 — 실적 인정액(currentSpend)이 아니다.
+  // 제외분을 빼고 세면 세금·상품권을 쓴 달에 사용액이 실제보다 작게 나오고,
+  // 환원율은 분모가 줄어 부풀려진다. 하이패스 캐시백처럼 제외 거래에도 붙는
+  // 혜택이 분자에는 들어가 있으므로 분모도 같은 기준이어야 한다.
+  const totalSpend = snapshots.reduce((sum, s) => sum + s.currentSpend + s.excludedSpend, 0);
 
   // 실적이 모자란 채로 월말이 가까운 카드 — 대시보드 상단에서 먼저 알린다
   const atRisk = snapshots.filter((s) => {
@@ -40,19 +44,9 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* 결제 직전에 여는 화면이라 대시보드 맨 위에서 바로 닿아야 한다 */}
-        <div className="mt-4">
-          <Link
-            href="/recommend"
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium"
-            style={{ background: 'var(--surface)', color: 'var(--text-primary)' }}
-          >
-            💳 이 결제, 어느 카드로?
-          </Link>
-        </div>
-
-        {/* 히어로 숫자는 화면당 하나. 이 앱이 존재하는 이유가 이 숫자다. */}
-        <p className="mt-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
+        {/* 히어로 숫자는 화면당 하나. 이 앱이 존재하는 이유가 이 숫자다.
+            큰 숫자에는 tabular를 쓰지 않는다 — 자간이 헐거워 보인다. */}
+        <p className="mt-5 text-xs" style={{ color: 'var(--text-secondary)' }}>
           이번 달 받은 혜택
         </p>
         <p
@@ -61,11 +55,22 @@ export default async function DashboardPage() {
         >
           {won(totalBenefit)}
         </p>
-        <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+        <p className="mt-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
           총 사용 {won(totalSpend)}
           {totalSpend > 0 &&
             ` · 실질 환원율 ${((totalBenefit / totalSpend) * 100).toFixed(1)}%`}
         </p>
+
+        {/* 결제 직전에 여는 화면이다. 이 앱의 주 행동이므로 칩이 아니라
+            폭을 다 쓰는 버튼으로 둔다. */}
+        <Link
+          href="/recommend"
+          className="mt-5 flex items-center justify-between gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-opacity hover:opacity-90"
+          style={{ background: 'var(--text-primary)', color: 'var(--background)' }}
+        >
+          <span>이 결제, 어느 카드로?</span>
+          <span aria-hidden>→</span>
+        </Link>
       </header>
 
       {isDemo && (

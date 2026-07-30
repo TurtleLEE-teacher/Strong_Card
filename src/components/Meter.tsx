@@ -4,7 +4,14 @@
  * 마크 규격:
  *  - 굵기 10px (얇은 마크), 데이터 끝은 4px 라운드, 베이스라인 쪽은 각지게
  *  - 트랙은 채움색의 옅은 단계(같은 램프) — 상태가 바 전체에서 읽히도록
- *  - 채움색은 **심각도**를 나타낸다 (accent → warning → critical)
+ *
+ * 채움색은 바가 하는 **일**에 따라 갈린다.
+ *  - 실적 바 → 심각도(accent → warning → critical). 못 채우면 손해라는 상태.
+ *  - 혜택 바 → 카드 정체성 색(color prop). 차오르는 것 자체는 나쁜 게 아니라
+ *    혜택을 받았다는 뜻이다. 소진은 색이 아니라 라벨로 알린다.
+ *
+ * 둘을 같은 빨강 램프로 칠하면 정반대 뜻이 같은 색으로 나온다 — 실적 빨강은
+ * "모자라다", 혜택 빨강은 "다 받았다"다. 화면이 온통 빨개지면서 뜻도 뒤집힌다.
  *
  * 구간 눈금(ticks)은 실적 바에만 쓴다. 다음 구간이 어디인지 보여주지 않으면
  * "얼마 남았는지"가 숫자로만 남아 바의 의미가 절반으로 준다.
@@ -31,6 +38,13 @@ export interface MeterProps {
   /** 0~1. 1을 넘으면 잘린다. */
   ratio: number;
   severity?: MeterSeverity;
+  /**
+   * 채움색을 직접 지정한다. severity보다 우선한다.
+   *
+   * 혜택 바처럼 **정체성**(어느 카드인가)을 나타내는 바에 쓴다. 심각도 색은
+   * 상태를 뜻하도록 아껴 둬야 하고, 카드 색은 개체를 따라가야 한다.
+   */
+  color?: string;
   ticks?: MeterTick[];
   /** 접근성용 설명 */
   ariaLabel: string;
@@ -40,12 +54,13 @@ export interface MeterProps {
 export function Meter({
   ratio,
   severity = 'accent',
+  color: explicitColor,
   ticks,
   ariaLabel,
   height = 10,
 }: MeterProps) {
   const clamped = Math.max(0, Math.min(1, ratio));
-  const color = SEVERITY_COLOR[severity];
+  const color = explicitColor ?? SEVERITY_COLOR[severity];
 
   return (
     <div className="w-full">

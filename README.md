@@ -136,4 +136,5 @@ Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Notion API · Web Pu
 
 ## 문서
 
+- [배포 가이드](docs/DEPLOY.md)
 - [개발 계획](docs/PLAN.md)
