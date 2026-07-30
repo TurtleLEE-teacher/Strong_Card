@@ -169,6 +169,28 @@ export interface BenefitRule {
   match: MerchantMatcher;
   /** 승인 시각 조건. 없으면 시간 무관. */
   timeWindow?: TimeWindow;
+  /**
+   * 적용 요일 (KST, 0=일 … 6=토). 없으면 요일 무관.
+   * 예: 신한EV 3대마트 할인은 주말에만 적용된다.
+   */
+  daysOfWeek?: number[];
+  /**
+   * 월 최대 적용 횟수. 카드사는 금액 한도와 별개로 횟수를 제한하는 일이 잦다.
+   * 예: 신한EV 편의점 할인은 월 5회까지.
+   */
+  maxCountPerMonth?: number;
+  /** 일 최대 적용 횟수. 예: 신한EV 커피 할인은 하루 1회. */
+  maxCountPerDay?: number;
+  /**
+   * 여러 룰이 하나의 월 한도를 나눠 쓸 때의 그룹 키.
+   *
+   * 신한EV 생활서비스는 6개 영역이 **통합 3만원** 한도를 공유한다. 룰을
+   * 영역별로 쪼개면서 각자 capPerMonth를 주면 한도가 6배로 부풀어 오른다.
+   * 같은 capGroup을 달면 소진량을 합산해 하나의 한도로 계산한다.
+   */
+  capGroup?: string;
+  /** 화면에 그룹을 하나로 묶어 보여줄 때 쓸 이름 */
+  capGroupLabel?: string;
   /** 이 룰의 숫자 출처. 기본 'estimated'. */
   confidence?: RuleConfidence;
   /** 할인·적립률. 0.2 = 20% */
@@ -240,6 +262,8 @@ export interface AppliedBenefit {
 /** 혜택 룰별 월 소진 현황 */
 export interface BenefitUsage {
   ruleId: string;
+  /** 여러 룰이 한 한도를 공유하면 그 그룹 키. 화면에서 한 줄로 합친다. */
+  capGroup?: string;
   label: string;
   type: 'discount' | 'point';
   used: number;
@@ -289,6 +313,11 @@ export interface CardMonthlySnapshot {
   /** appliedTier의 통합 한도. null이면 무제한. */
   totalBenefitCap: number | null;
 
+  /**
+   * 룰별 이번 달 적용 횟수. 횟수 제한이 있는 혜택을 추천할 때 참조한다.
+   * 이게 없으면 월 5회를 이미 다 쓴 혜택을 계속 추천하게 된다.
+   */
+  ruleCounts: Record<string, number>;
   /** 혜택 매칭에 실패한 거래 (미분류 관리 화면에서 쓴다) */
   unmatchedTransactionIds: string[];
   transactionCount: number;

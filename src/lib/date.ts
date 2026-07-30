@@ -96,6 +96,15 @@ export function isWithinHours(isoUtc: string, startHour: number, endHour: number
     : hour >= startHour || hour < endHour;
 }
 
+/**
+ * KST 기준 요일 (0=일 … 6=토).
+ * 카드사 요일 조건(예: 주말만 할인)을 UTC로 판정하면 토요일 오전 9시 이전
+ * 결제가 금요일로 잡혀 할인이 사라진다.
+ */
+export function kstDayOfWeek(isoUtc: string): number {
+  return new Date(new Date(isoUtc).getTime() + KST_OFFSET_MS).getUTCDay();
+}
+
 /** UTC ISO를 KST 'YYYY-MM-DD' 로 */
 export function toKstDateString(isoUtc: string): string {
   const kst = new Date(new Date(isoUtc).getTime() + KST_OFFSET_MS);

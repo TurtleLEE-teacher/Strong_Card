@@ -26,6 +26,8 @@ import {
   isRuleEffective,
   isRuleEffectiveInMonth,
   isWithinHours,
+  kstDayOfWeek,
+  toKstDateString,
   type MonthKey,
 } from '@/lib/date';
 
@@ -36,6 +38,11 @@ export interface BenefitResult {
   totalCap: number | null;
   /** 어떤 룰에도 매칭되지 않은 거래 */
   unmatchedTransactionIds: string[];
+  /**
+   * 룰별 이번 달 적용 횟수.
+   * 추천 엔진이 "이미 월 5회를 다 썼는지"를 알려면 이 값이 필요하다.
+   */
+  ruleCounts: Record<string, number>;
 }
 
 /**
@@ -63,12 +70,16 @@ export function resolveCap(
 export function matchesRule(rule: BenefitRule, tx: Transaction): boolean {
   const { match } = rule;
 
-  // 시각 조건이 있으면 가맹점을 보기 전에 먼저 거른다.
-  // (신한 Discount Plan의 DAY 07~15시 / NIGHT 18~22시)
+  // 시각·요일 조건이 있으면 가맹점을 보기 전에 먼저 거른다.
+  // (신한 Discount Plan의 DAY 07~15시 / NIGHT 18~22시, 신한EV 3대마트 주말)
   if (
     rule.timeWindow &&
     !isWithinHours(tx.approvedAt, rule.timeWindow.startHour, rule.timeWindow.endHour)
   ) {
+    return false;
+  }
+
+  if (rule.daysOfWeek?.length && !rule.daysOfWeek.includes(kstDayOfWeek(tx.approvedAt))) {
     return false;
   }
   const hasCondition =
@@ -128,6 +139,7 @@ export function selectRule(
   card: Card,
   tx: Transaction,
   appliedTier: SpendTier | null,
+  counters?: UsageCounters,
 ): BenefitRule | null {
   const candidates = card.benefits
     .filter((r) => isRuleEffective(tx.approvedAt, r.effectiveFrom, r.effectiveUntil))
@@ -136,9 +148,44 @@ export function selectRule(
 
   for (const rule of candidates) {
     if (rule.minAmountPerTx && tx.krwAmount < rule.minAmountPerTx) continue;
+    // 횟수를 다 쓴 룰은 건너뛴다. 그래야 차순위 룰이 대신 적용될 기회를 갖는다.
+    if (counters && !counters.hasRemainingCount(rule, tx)) continue;
     if (matchesRule(rule, tx)) return rule;
   }
   return null;
+}
+
+/**
+ * 룰별 적용 횟수 추적기.
+ *
+ * 카드사는 금액 한도와 **별개로** 횟수를 제한하는 일이 잦다.
+ * (신한EV 편의점 월 5회, 커피 일 1회 등) 횟수를 안 보면 한 영역에서
+ * 한도를 다 채워버려 실제보다 혜택이 크게 나온다.
+ */
+export class UsageCounters {
+  private readonly monthly = new Map<string, number>();
+  private readonly daily = new Map<string, number>();
+
+  hasRemainingCount(rule: BenefitRule, tx: Transaction): boolean {
+    if (rule.maxCountPerMonth !== undefined) {
+      if ((this.monthly.get(rule.id) ?? 0) >= rule.maxCountPerMonth) return false;
+    }
+    if (rule.maxCountPerDay !== undefined) {
+      const key = `${rule.id}:${toKstDateString(tx.approvedAt)}`;
+      if ((this.daily.get(key) ?? 0) >= rule.maxCountPerDay) return false;
+    }
+    return true;
+  }
+
+  record(rule: BenefitRule, tx: Transaction): void {
+    this.monthly.set(rule.id, (this.monthly.get(rule.id) ?? 0) + 1);
+    const key = `${rule.id}:${toKstDateString(tx.approvedAt)}`;
+    this.daily.set(key, (this.daily.get(key) ?? 0) + 1);
+  }
+
+  countFor(ruleId: string): number {
+    return this.monthly.get(ruleId) ?? 0;
+  }
 }
 
 /**
@@ -178,8 +225,10 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
   );
 
   const totalCap = appliedTier ? appliedTier.totalBenefitCap : null;
+  // capGroup이 있으면 그 키로 한도를 공유한다. 없으면 룰 하나가 곧 한 그룹.
   const monthlyUsed = new Map<string, number>();
   const txCount = new Map<string, number>();
+  const counters = new UsageCounters();
   const appliedBenefits: AppliedBenefit[] = [];
   const unmatchedTransactionIds: string[] = [];
   let totalUsed = 0;
@@ -187,7 +236,7 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
   for (const tx of transactions) {
     if (tx.canceled || tx.paymentKind === '취소·환불') continue;
 
-    const rule = selectRule(card, tx, appliedTier);
+    const rule = selectRule(card, tx, appliedTier, counters);
     if (!rule) {
       // 실적 미달로 룰이 비활성이면 '미분류'가 아니다. 브랜드 사전에
       // 아예 없는 가맹점만 미분류로 올려야 관리 화면이 신호를 유지한다.
@@ -203,7 +252,8 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
     }
 
     const ruleCap = resolveCap(rule.capPerMonth, appliedTier);
-    const used = monthlyUsed.get(rule.id) ?? 0;
+    const capKey = rule.capGroup ?? rule.id;
+    const used = monthlyUsed.get(capKey) ?? 0;
 
     let amount = Math.floor(tx.krwAmount * rule.rate);
     const gross = amount;
@@ -233,8 +283,10 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
       }
     }
 
-    monthlyUsed.set(rule.id, used + amount);
+    monthlyUsed.set(capKey, used + amount);
     txCount.set(rule.id, (txCount.get(rule.id) ?? 0) + 1);
+    // 금액이 0원이어도 횟수는 소진된 것으로 본다. 카드사도 그렇게 센다.
+    counters.record(rule, tx);
     totalUsed += amount;
 
     appliedBenefits.push({
@@ -256,9 +308,11 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
     )
     .map((rule) => {
       const cap = resolveCap(rule.capPerMonth, appliedTier);
-      const used = monthlyUsed.get(rule.id) ?? 0;
+      const capKey = rule.capGroup ?? rule.id;
+      const used = monthlyUsed.get(capKey) ?? 0;
       return {
         ruleId: rule.id,
+        capGroup: rule.capGroup,
         label: rule.label,
         type: rule.type,
         used,
@@ -270,5 +324,35 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
     // 한도가 0으로 죽은 룰(다른 구간 전용)은 소진액이 없으면 감춘다.
     .filter((u) => !(u.cap === 0 && u.used === 0));
 
-  return { appliedBenefits, usage, totalUsed, totalCap, unmatchedTransactionIds };
+  // 같은 한도를 나눠 쓰는 룰들은 한 줄로 합친다. 안 합치면 화면에
+  // '3만원 한도'가 여러 개 있는 것처럼 보여 총 한도를 오해하게 된다.
+  const grouped: BenefitUsage[] = [];
+  const groupIndex = new Map<string, number>();
+  for (const u of usage) {
+    if (!u.capGroup) {
+      grouped.push(u);
+      continue;
+    }
+    const seen = groupIndex.get(u.capGroup);
+    if (seen === undefined) {
+      const label =
+        card.benefits.find((r) => r.capGroup === u.capGroup)?.capGroupLabel ?? u.label;
+      groupIndex.set(u.capGroup, grouped.length);
+      grouped.push({ ...u, ruleId: u.capGroup, label, txCount: u.txCount });
+    } else {
+      // used는 그룹 공유값이라 그대로 두고 건수만 더한다.
+      grouped[seen].txCount += u.txCount;
+    }
+  }
+
+  return {
+    appliedBenefits,
+    usage: grouped,
+    totalUsed,
+    totalCap,
+    unmatchedTransactionIds,
+    ruleCounts: Object.fromEntries(
+      card.benefits.map((r) => [r.id, counters.countFor(r.id)]),
+    ),
+  };
 }
