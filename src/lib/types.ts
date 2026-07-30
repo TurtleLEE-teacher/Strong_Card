@@ -1,0 +1,249 @@
+/**
+ * Strong Card 도메인 타입.
+ *
+ * 용어 정리 (헷갈리면 여기로 돌아올 것):
+ * - 실적(performance): 이번 달에 쓴 금액. **다음 달** 혜택 구간을 결정한다.
+ * - 적용 구간(applied tier): 이번 달 혜택 한도. **지난달** 실적으로 이미 확정돼 있다.
+ * 이 둘은 항상 한 달 어긋나 있으므로 절대 섞지 않는다.
+ */
+
+/** 카드 상품 ID. Notion `카드 상품` select 옵션과 1:1 대응한다. */
+export type CardId =
+  | 'kb-tantandaero'
+  | 'kb-coupang-wow'
+  | 'samsung-amex-blue'
+  | 'hyundai-zero-ed2'
+  | 'shinhan-discount-plan'
+  | 'shinhan-ev';
+
+export type Issuer = '국민' | '신한' | '삼성' | '현대';
+
+/** Notion `카테고리` select 옵션. 브랜드 매칭 실패 시 폴백 신호로 쓴다. */
+export type TxCategory =
+  | '식비' | '카페' | '교통' | '생활' | '의료'
+  | '교육' | '여가' | '구독' | '업무' | '금융' | '기타';
+
+export type Currency = 'KRW' | 'USD' | 'JPY' | 'EUR' | '기타';
+
+export type PaymentKind = '일시불' | '할부' | '해외' | '취소·환불';
+
+/** 실적 제외 사유. Notion `실적 인정` select와 대응한다. */
+export type PerformanceVerdict =
+  | '인정'
+  | '제외-취소'
+  | '제외-공과금'
+  | '제외-상품권'
+  | '제외-무승인'
+  | '제외-기타';
+
+// ---------------------------------------------------------------------------
+// 거래
+// ---------------------------------------------------------------------------
+
+/** Notion `💳 Card_Transactions` 한 행을 앱 도메인으로 옮긴 것. */
+export interface Transaction {
+  /** Notion page id */
+  id: string;
+  /** 가맹점명 (title) */
+  title: string;
+  /** 가맹점 원문 */
+  merchant: string | null;
+  /** 원본 금액. 해외결제면 외화 원금이다. 계산에 직접 쓰지 말 것. */
+  rawAmount: number;
+  currency: Currency;
+  /** 원화 환산 금액. 실적·혜택 계산은 **오직 이 값만** 사용한다. */
+  krwAmount: number;
+  /** 승인일시 (UTC ISO). 실적 기간 판정 기준. */
+  approvedAt: string;
+  issuer: Issuer | null;
+  /** 원문에서 파싱한 카드 뒤 4자리 */
+  last4: string | null;
+  /** last4로 매핑한 카드 상품. 매핑 실패 시 null. */
+  cardId: CardId | null;
+  category: TxCategory | null;
+  paymentKind: PaymentKind | null;
+  installmentMonths: number | null;
+  canceled: boolean;
+  /** SMS 원문 */
+  rawMessage: string | null;
+  /** 원문에서 파싱한 카드사 공식 누적 실적 (있으면 정합성 검증에 쓴다) */
+  issuerCumulative: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// 카드 마스터
+// ---------------------------------------------------------------------------
+
+/** 전월실적 구간. threshold 이상이면 이 구간의 혜택 한도가 적용된다. */
+export interface SpendTier {
+  /** 실적 하한 (원). 0이면 "실적 없음" 구간. */
+  threshold: number;
+  label: string;
+  /** 이 구간에서의 월 통합 혜택 한도 (원). null이면 한도 없음. */
+  totalBenefitCap: number | null;
+}
+
+/** 실적 제외 규칙. 하나라도 걸리면 그 사유로 제외된다. */
+export interface ExclusionRule {
+  verdict: Exclude<PerformanceVerdict, '인정'>;
+  reason: string;
+  /** 가맹점명/카테고리 매칭 */
+  keywords?: string[];
+  categories?: TxCategory[];
+}
+
+export interface PerformancePolicy {
+  /** false면 무실적 카드 — 실적 바를 그리지 않는다. */
+  required: boolean;
+  /** 실적 구간표. 낮은 threshold부터 오름차순. */
+  tiers: SpendTier[];
+  exclusions: ExclusionRule[];
+  /** 해외 결제를 실적에 산입하는지 */
+  countsForeignSpend: boolean;
+  /**
+   * 할부 실적 인정 방식.
+   * 'full'   = 승인월에 전액 인정
+   * 'monthly'= 매월 분할금만 인정
+   */
+  installmentPolicy: 'full' | 'monthly';
+}
+
+/** 구간별로 달라지는 한도. threshold는 SpendTier.threshold와 맞춘다. */
+export interface TierCap {
+  threshold: number;
+  cap: number | null;
+}
+
+export interface MerchantMatcher {
+  /** 정규화된 브랜드 키 (config/merchants.ts) */
+  brands?: string[];
+  /** 브랜드 매칭 실패 시 쓰는 Notion 카테고리 폴백 */
+  categories?: TxCategory[];
+  /** 가맹점명 부분일치 (정규화 후) */
+  keywords?: string[];
+  /** 위 조건에 걸려도 이건 제외 */
+  excludeKeywords?: string[];
+}
+
+export interface BenefitRule {
+  id: string;
+  label: string;
+  type: 'discount' | 'point';
+  match: MerchantMatcher;
+  /** 할인·적립률. 0.2 = 20% */
+  rate: number;
+  /** 건당 최소 결제금액. 미만이면 혜택 없음. */
+  minAmountPerTx?: number;
+  /** 건당 혜택 한도 */
+  capPerTx?: number;
+  /** 월 혜택 한도. 구간에 따라 달라지면 TierCap[]. null/undefined면 무제한. */
+  capPerMonth?: number | TierCap[] | null;
+  /** 이 룰이 유효한 시작일 (YYYY-MM-DD, 포함) */
+  effectiveFrom?: string;
+  /** 이 룰이 유효한 종료일 (YYYY-MM-DD, 포함) — 프로모션 종료일 */
+  effectiveUntil?: string;
+  /** 우선순위. 낮을수록 먼저 매칭 시도. 기본 100. */
+  priority?: number;
+  /**
+   * 실적에서 제외된 거래에도 혜택을 줄지.
+   * 기본 false — 세금·상품권 결제에 적립이 붙는 과다 계상을 막는다.
+   * 예외: 신한EV 하이패스는 무승인 전표라 실적 제외지만 캐시백은 나온다.
+   */
+  applyToExcludedSpend?: boolean;
+  notes?: string;
+}
+
+export interface Card {
+  id: CardId;
+  /** Notion `카드 상품` select 옵션명과 정확히 일치해야 한다. */
+  notionOption: string;
+  issuer: Issuer;
+  name: string;
+  shortName: string;
+  /** 카드 뒤 4자리. 재발급 대비 배열. */
+  last4: string[];
+  active: boolean;
+  annualFee: number;
+  /** UI 강조 색 (Tailwind 클래스가 아니라 CSS 색상값) */
+  color: string;
+  performance: PerformancePolicy;
+  benefits: BenefitRule[];
+  /** 카드 통합 월 혜택 한도. tiers의 totalBenefitCap과 중복되면 이쪽이 우선. */
+  productPageUrl?: string;
+}
+
+// ---------------------------------------------------------------------------
+// 계산 결과
+// ---------------------------------------------------------------------------
+
+/** 거래 1건에 대한 혜택 적용 결과 */
+export interface AppliedBenefit {
+  transactionId: string;
+  ruleId: string;
+  ruleLabel: string;
+  type: 'discount' | 'point';
+  /** 한도 적용 전 이론값 */
+  grossAmount: number;
+  /** 한도(건당·월간·통합) 적용 후 실제 금액 */
+  netAmount: number;
+  /** 한도에 걸려 깎인 금액 */
+  cappedAmount: number;
+  cappedBy: 'none' | 'per-tx' | 'per-month' | 'total';
+}
+
+/** 혜택 룰별 월 소진 현황 */
+export interface BenefitUsage {
+  ruleId: string;
+  label: string;
+  type: 'discount' | 'point';
+  used: number;
+  cap: number | null;
+  /** cap이 null이면 null */
+  ratio: number | null;
+  txCount: number;
+}
+
+/** 실적 제외 내역 요약 */
+export interface ExclusionSummary {
+  verdict: PerformanceVerdict;
+  amount: number;
+  count: number;
+}
+
+export interface CardMonthlySnapshot {
+  cardId: CardId;
+  /** 'YYYY-MM' (KST) */
+  month: string;
+
+  // --- 이번 달 실적 (→ 다음 달 혜택을 결정) ---
+  /** 실적으로 인정된 금액 합계 */
+  currentSpend: number;
+  /** 제외된 금액 합계 */
+  excludedSpend: number;
+  exclusions: ExclusionSummary[];
+  /** currentSpend 기준으로 지금 달성한 구간 */
+  reachedTier: SpendTier | null;
+  /** 아직 못 넘은 다음 구간 */
+  nextTier: SpendTier | null;
+  /** 다음 구간까지 남은 금액. nextTier가 없으면 0. */
+  remainingToNextTier: number;
+  /** 카드사 SMS가 알려준 공식 누계 (최신값) */
+  issuerReportedSpend: number | null;
+  /** currentSpend - issuerReportedSpend. 룰 오류 탐지용. */
+  reconciliationDelta: number | null;
+
+  // --- 이번 달 혜택 (← 지난달 실적으로 확정) ---
+  /** 지난달 실적 */
+  previousSpend: number;
+  /** 지난달 실적으로 확정된, 이번 달 적용 구간 */
+  appliedTier: SpendTier | null;
+  benefitUsage: BenefitUsage[];
+  appliedBenefits: AppliedBenefit[];
+  totalBenefitUsed: number;
+  /** appliedTier의 통합 한도. null이면 무제한. */
+  totalBenefitCap: number | null;
+
+  /** 혜택 매칭에 실패한 거래 (미분류 관리 화면에서 쓴다) */
+  unmatchedTransactionIds: string[];
+  transactionCount: number;
+}

@@ -1,0 +1,243 @@
+/**
+ * 혜택 매칭·한도 계산 엔진.
+ *
+ * 카드사는 "이용 순서대로 월간 한도 내에서 할인을 적용"한다.
+ * 따라서 거래를 **승인 시각 오름차순으로** 처리해야 한도 소진 결과가
+ * 실제 청구서와 일치한다. 정렬을 빼먹으면 한도에 걸리는 거래가 달라진다.
+ *
+ * 한도는 3중으로 걸린다:
+ *   1. 건당 한도 (capPerTx)
+ *   2. 룰별 월 한도 (capPerMonth) — 적용 구간에 따라 달라질 수 있음
+ *   3. 카드 통합 월 한도 (appliedTier.totalBenefitCap)
+ */
+
+import type {
+  AppliedBenefit,
+  BenefitRule,
+  BenefitUsage,
+  Card,
+  PerformanceVerdict,
+  SpendTier,
+  TierCap,
+  Transaction,
+} from '@/lib/types';
+import { normalizeMerchant, resolveBrand } from '@/config/merchants';
+import { isRuleEffective } from '@/lib/date';
+
+export interface BenefitResult {
+  appliedBenefits: AppliedBenefit[];
+  usage: BenefitUsage[];
+  totalUsed: number;
+  totalCap: number | null;
+  /** 어떤 룰에도 매칭되지 않은 거래 */
+  unmatchedTransactionIds: string[];
+}
+
+/**
+ * 구간별 한도(TierCap[])를 적용 구간에 맞춰 단일 값으로 푼다.
+ * appliedTier가 null이면 실적 미달로 보고 가장 낮은 구간을 쓴다.
+ */
+export function resolveCap(
+  cap: number | TierCap[] | null | undefined,
+  appliedTier: SpendTier | null,
+): number | null {
+  if (cap === null || cap === undefined) return null; // 무제한
+  if (typeof cap === 'number') return cap;
+
+  const threshold = appliedTier?.threshold ?? 0;
+  let resolved: number | null = null;
+  for (const entry of cap) {
+    if (threshold >= entry.threshold) resolved = entry.cap;
+    else break;
+  }
+  // 구간표에 해당 항목이 없으면 혜택 없음으로 본다 (과다 계상보다 안전)
+  return resolved ?? 0;
+}
+
+/** 거래가 이 룰의 매칭 조건에 걸리는지 */
+export function matchesRule(rule: BenefitRule, tx: Transaction): boolean {
+  const { match } = rule;
+  const hasCondition =
+    !!match.brands?.length || !!match.keywords?.length || !!match.categories?.length;
+
+  const merchantText = normalizeMerchant(
+    [tx.title, tx.merchant].filter(Boolean).join(' '),
+  );
+
+  if (match.excludeKeywords?.length) {
+    for (const kw of match.excludeKeywords) {
+      if (merchantText.includes(normalizeMerchant(kw))) return false;
+    }
+  }
+
+  // 조건이 하나도 없으면 catch-all 룰 (예: ZERO 전 가맹점 1%)
+  if (!hasCondition) return true;
+
+  if (match.brands?.length) {
+    const brand = resolveBrand(tx.merchant ?? tx.title);
+    if (brand && match.brands.includes(brand)) return true;
+  }
+
+  if (match.keywords?.length) {
+    for (const kw of match.keywords) {
+      if (merchantText.includes(normalizeMerchant(kw))) return true;
+    }
+  }
+
+  // 카테고리는 브랜드·키워드 매칭 실패 시의 폴백 신호다.
+  if (match.categories?.length && tx.category) {
+    if (match.categories.includes(tx.category)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * 거래에 적용할 룰 하나를 고른다.
+ * priority 오름차순(낮을수록 우선) → 먼저 매칭되는 룰 하나만 적용한다.
+ * 카드사는 보통 중복 할인을 주지 않으므로 최초 1건만 적용한다.
+ *
+ * 적용 구간에서 한도가 0인 룰은 **비활성**으로 보고 건너뛴다.
+ * 이게 없으면 같은 대상에 요율만 다른 룰이 여러 개일 때
+ * (예: 신한EV 충전 30% / 50%) 우선순위가 높은 쪽이 다른 쪽을 가려버려
+ * 혜택이 0원으로 나온다.
+ */
+export function selectRule(
+  card: Card,
+  tx: Transaction,
+  appliedTier: SpendTier | null,
+): BenefitRule | null {
+  const candidates = card.benefits
+    .filter((r) => isRuleEffective(tx.approvedAt, r.effectiveFrom, r.effectiveUntil))
+    .filter((r) => resolveCap(r.capPerMonth, appliedTier) !== 0)
+    .sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
+
+  for (const rule of candidates) {
+    if (rule.minAmountPerTx && tx.krwAmount < rule.minAmountPerTx) continue;
+    if (matchesRule(rule, tx)) return rule;
+  }
+  return null;
+}
+
+/**
+ * 한도·구간을 무시하고 어떤 룰에든 걸리는지만 본다.
+ * "혜택 대상이지만 실적이 모자라 못 받은 것"과 "애초에 혜택 대상이 아닌 것"을
+ * 구분하기 위해 쓴다. 후자만 '미분류'로 노출해야 한다.
+ */
+export function matchesAnyRule(card: Card, tx: Transaction): boolean {
+  return card.benefits.some(
+    (r) =>
+      isRuleEffective(tx.approvedAt, r.effectiveFrom, r.effectiveUntil) &&
+      matchesRule(r, tx),
+  );
+}
+
+export interface ComputeBenefitsInput {
+  card: Card;
+  /** 이번 달 거래 (해당 카드로 이미 필터링된 것) */
+  transactions: Transaction[];
+  /** **지난달** 실적으로 확정된 이번 달 적용 구간 */
+  appliedTier: SpendTier | null;
+  /** 거래별 실적 판정. 제외 거래에 혜택을 주지 않기 위해 참조한다. */
+  verdicts?: Map<string, PerformanceVerdict>;
+}
+
+export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
+  const { card, appliedTier, verdicts } = input;
+
+  // 이용 순서대로 한도를 소진해야 실제 청구서와 일치한다.
+  const transactions = [...input.transactions].sort(
+    (a, b) => new Date(a.approvedAt).getTime() - new Date(b.approvedAt).getTime(),
+  );
+
+  const totalCap = appliedTier ? appliedTier.totalBenefitCap : null;
+  const monthlyUsed = new Map<string, number>();
+  const txCount = new Map<string, number>();
+  const appliedBenefits: AppliedBenefit[] = [];
+  const unmatchedTransactionIds: string[] = [];
+  let totalUsed = 0;
+
+  for (const tx of transactions) {
+    if (tx.canceled || tx.paymentKind === '취소·환불') continue;
+
+    const rule = selectRule(card, tx, appliedTier);
+    if (!rule) {
+      // 실적 미달로 룰이 비활성이면 '미분류'가 아니다. 브랜드 사전에
+      // 아예 없는 가맹점만 미분류로 올려야 관리 화면이 신호를 유지한다.
+      if (!matchesAnyRule(card, tx)) unmatchedTransactionIds.push(tx.id);
+      continue;
+    }
+
+    // 실적에서 제외된 거래(세금·상품권 등)는 원칙적으로 혜택도 없다.
+    // 단, 룰이 명시적으로 opt-in 하면 준다 (예: 신한EV 하이패스 캐시백).
+    const verdict = verdicts?.get(tx.id);
+    if (verdict && verdict !== '인정' && !rule.applyToExcludedSpend) {
+      continue;
+    }
+
+    const ruleCap = resolveCap(rule.capPerMonth, appliedTier);
+    const used = monthlyUsed.get(rule.id) ?? 0;
+
+    let amount = Math.floor(tx.krwAmount * rule.rate);
+    const gross = amount;
+    let cappedBy: AppliedBenefit['cappedBy'] = 'none';
+
+    // 1. 건당 한도
+    if (rule.capPerTx !== undefined && amount > rule.capPerTx) {
+      amount = rule.capPerTx;
+      cappedBy = 'per-tx';
+    }
+
+    // 2. 룰별 월 한도
+    if (ruleCap !== null) {
+      const remaining = Math.max(0, ruleCap - used);
+      if (amount > remaining) {
+        amount = remaining;
+        cappedBy = 'per-month';
+      }
+    }
+
+    // 3. 카드 통합 월 한도
+    if (totalCap !== null) {
+      const remainingTotal = Math.max(0, totalCap - totalUsed);
+      if (amount > remainingTotal) {
+        amount = remainingTotal;
+        cappedBy = 'total';
+      }
+    }
+
+    monthlyUsed.set(rule.id, used + amount);
+    txCount.set(rule.id, (txCount.get(rule.id) ?? 0) + 1);
+    totalUsed += amount;
+
+    appliedBenefits.push({
+      transactionId: tx.id,
+      ruleId: rule.id,
+      ruleLabel: rule.label,
+      type: rule.type,
+      grossAmount: gross,
+      netAmount: amount,
+      cappedAmount: gross - amount,
+      cappedBy,
+    });
+  }
+
+  const usage: BenefitUsage[] = card.benefits
+    .map((rule) => {
+      const cap = resolveCap(rule.capPerMonth, appliedTier);
+      const used = monthlyUsed.get(rule.id) ?? 0;
+      return {
+        ruleId: rule.id,
+        label: rule.label,
+        type: rule.type,
+        used,
+        cap,
+        ratio: cap && cap > 0 ? Math.min(1, used / cap) : null,
+        txCount: txCount.get(rule.id) ?? 0,
+      };
+    })
+    // 한도가 0으로 죽은 룰(다른 구간 전용)은 소진액이 없으면 감춘다.
+    .filter((u) => !(u.cap === 0 && u.used === 0));
+
+  return { appliedBenefits, usage, totalUsed, totalCap, unmatchedTransactionIds };
+}
