@@ -1,0 +1,53 @@
+name: Cron
+
+# Vercel Hobby 플랜의 크론은 하루 1회로 제한된다. 15분 간격 동기화가
+# 불가능하므로 GitHub Actions가 앱의 크론 엔드포인트를 호출한다.
+#
+# 필요한 저장소 시크릿:
+#   APP_BASE_URL  배포된 앱 주소 (예: https://strong-card.vercel.app)
+#   CRON_SECRET   앱 환경변수와 같은 값
+
+on:
+  schedule:
+    # 거래 동기화: 15분마다
+    - cron: '*/15 * * * *'
+    # 월 단위 알림: 매일 KST 09:00 (= UTC 00:00)
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 실행할 작업
+        type: choice
+        options: [sync, alerts]
+        default: sync
+
+jobs:
+  sync:
+    # 15분 스케줄과 수동 실행(sync)에서만 돈다
+    if: github.event.schedule == '*/15 * * * *' || inputs.job == 'sync'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 거래 동기화 및 혜택 알림
+        run: |
+          response=$(curl -sS -w '\n%{http_code}' -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_BASE_URL }}/api/cron/sync")
+          body=$(echo "$response" | head -n -1)
+          code=$(echo "$response" | tail -n 1)
+          echo "$body"
+          # 실패를 조용히 넘기면 알림이 안 오는데 이유를 모르게 된다.
+          [ "$code" = "200" ] || { echo "::error::sync 실패 (HTTP $code)"; exit 1; }
+
+  alerts:
+    if: github.event.schedule == '0 0 * * *' || inputs.job == 'alerts'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 실적·한도 알림 평가
+        run: |
+          response=$(curl -sS -w '\n%{http_code}' -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_BASE_URL }}/api/cron/alerts")
+          body=$(echo "$response" | head -n -1)
+          code=$(echo "$response" | tail -n 1)
+          echo "$body"
+          [ "$code" = "200" ] || { echo "::error::alerts 실패 (HTTP $code)"; exit 1; }

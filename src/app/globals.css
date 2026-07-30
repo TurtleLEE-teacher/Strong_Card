@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/*
+ * 색은 검증된 카테고리 팔레트를 그대로 쓴다.
+ * 카드 식별색(--series-1..6)은 두 모드 모두 CVD 분리·명도대비 검증을 통과한
+ * 고정 순서다. 임의로 바꾸지 말 것 — 바꾸면 재검증이 필요하다.
+ *
+ * 라이트 모드에서 series-3(aqua)·4(yellow)·5(magenta)는 표면 대비 3:1 미만이라
+ * '가시 라벨' 완화 규칙이 적용된다. 카드 위젯은 항상 카드명을 텍스트로
+ * 함께 보여주므로 색만으로 식별을 요구하지 않는다.
+ */
+
+:root {
+  --background: #f4f4f2;
+  --surface: #fcfcfb;
+  --surface-alt: #f7f7f5;
+  --border: #e3e3df;
+  --text-primary: #1c1c1a;
+  --text-secondary: #55554e;
+  --text-muted: #7b7b73;
+
+  --series-1: #2a78d6; /* blue    — 탄탄대로 */
+  --series-2: #eb6834; /* orange  — 쿠팡와우 */
+  --series-3: #1baf7a; /* aqua    — Amex Blue */
+  --series-4: #eda100; /* yellow  — ZERO Ed2 */
+  --series-5: #e87ba4; /* magenta — Discount Plan */
+  --series-6: #008300; /* green   — 신한 EV */
+
+  /* 상태색은 고정. 시리즈 색으로 재사용하지 않는다. */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+
+  --meter-accent: #2a78d6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --background: #121211;
+    --surface: #1a1a19;
+    --surface-alt: #232322;
+    --border: #333331;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #94938a;
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+
+    --meter-accent: #3987e5;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #121211;
+  --surface: #1a1a19;
+  --surface-alt: #232322;
+  --border: #333331;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #94938a;
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+
+  --meter-accent: #3987e5;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-hairline: var(--border);
+  --color-ink: var(--text-primary);
+  --color-ink-secondary: var(--text-secondary);
+  --color-ink-muted: var(--text-muted);
+  --color-good: var(--status-good);
+  --color-warning: var(--status-warning);
+  --color-serious: var(--status-serious);
+  --color-critical: var(--status-critical);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", Pretendard, "Malgun Gothic", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * 세로로 정렬되는 숫자 열에만 tabular-nums를 쓴다.
+ * 히어로 숫자·스탯 값에 걸면 자간이 헐거워 보인다.
+ */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
