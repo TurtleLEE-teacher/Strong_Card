@@ -117,49 +117,51 @@ describe('실적 구간 달성', () => {
 });
 
 describe('혜택 한도 소진', () => {
-  // 6월 40만 실적 → 7월 통합 한도 70,000원.
-  const base = tx('kb-tantandaero', '아방가르드', 400_000, '06-15');
+  // 탄탄대로는 통합 한도가 없어(영역별 한도만) 한도 소진 알림 대상이 아니다.
+  // 통합 한도가 있는 Discount Plan으로 검증한다.
+  const dp = CARDS_BY_ID['shinhan-discount-plan'];
+  // 6월 40만 실적 → 7월 통합 한도 10,000원.
+  const base = tx('shinhan-discount-plan', '아방가르드', 400_000, '06-15');
 
-  it('80% 미만이면 조용하다', () => {
+  it('통합 한도가 없는 카드는 소진 알림 대상이 아니다', () => {
     const snapshot = buildSnapshot(
       tantan,
-      [base, tx('kb-tantandaero', '헤어살롱', 100_000, '07-05')], // 20,000
+      [
+        tx('kb-tantandaero', '아방가르드', 900_000, '06-15'),
+        tx('kb-tantandaero', '헤어살롱', 300_000, '07-05'),
+      ],
       '2026-07',
     );
-    expect(snapshot.totalBenefitCap).toBe(70_000);
+    expect(snapshot.totalBenefitCap).toBeNull();
     const alerts = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 20 });
     expect(alerts.filter((a) => a.type === '한도소진임박')).toHaveLength(0);
   });
 
-  it('80%를 넘으면 80% 알림만 난다 (아직 여유가 있으니 소진 알림은 이르다)', () => {
-    // 미용 20% × 30만 = 60,000 / 70,000 ≈ 86%
+  it('80% 미만이면 조용하다', () => {
     const snapshot = buildSnapshot(
-      tantan,
-      [base, tx('kb-tantandaero', '헤어살롱', 300_000, '07-05')],
+      dp,
+      [base, tx('shinhan-discount-plan', '한국전력공사 전기요금', 20_000, '07-05')], // 2,000
       '2026-07',
     );
-    expect(snapshot.totalBenefitUsed).toBe(60_000);
-
-    const capAlerts = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 20 }).filter(
-      (a) => a.type === '한도소진임박',
-    );
-    expect(capAlerts).toHaveLength(1);
-    expect(capAlerts[0].key).toContain('cap_80');
+    expect(snapshot.totalBenefitCap).toBe(10_000);
+    const alerts = evaluateMonthlyAlerts({ card: dp, snapshot, daysRemaining: 20 });
+    expect(alerts.filter((a) => a.type === '한도소진임박')).toHaveLength(0);
   });
 
   it('한도를 다 쓰면 80% 알림과 100% 알림이 각각 난다', () => {
     const snapshot = buildSnapshot(
-      tantan,
+      dp,
       [
         base,
-        tx('kb-tantandaero', '헤어살롱', 300_000, '07-05'), // 60,000
-        tx('kb-tantandaero', '스크린골프', 200_000, '07-06'), // 잔여 10,000
+        // 공과금 10%, 건당 한도 5,000원 → 두 건이면 통합 10,000원을 채운다
+        tx('shinhan-discount-plan', '한국전력공사 전기요금', 100_000, '07-05'),
+        tx('shinhan-discount-plan', '도시가스 요금', 100_000, '07-06'),
       ],
       '2026-07',
     );
-    expect(snapshot.totalBenefitUsed).toBe(70_000);
+    expect(snapshot.totalBenefitUsed).toBe(10_000);
 
-    const capAlerts = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 20 }).filter(
+    const capAlerts = evaluateMonthlyAlerts({ card: dp, snapshot, daysRemaining: 20 }).filter(
       (a) => a.type === '한도소진임박',
     );
     expect(capAlerts).toHaveLength(2);

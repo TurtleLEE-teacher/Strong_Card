@@ -330,12 +330,12 @@ describe('혜택 한도 계산', () => {
         tx({ title: '미용실', krwAmount: 200_000, approvedAt: '2026-07-01T01:00:00Z' }),
         tx({ title: '골프연습장', krwAmount: 200_000, approvedAt: '2026-07-02T01:00:00Z' }),
       ],
-      // 통합 한도 70,000원인 40만 구간
-      appliedTier: tantan.performance.tiers[1],
+      appliedTier: tantan.performance.tiers[1], // 40만 구간
     });
-    // 미용 40,000 + 골프 40,000 = 80,000 → 통합 한도 70,000에서 잘린다
-    expect(result.totalUsed).toBe(70_000);
-    expect(result.appliedBenefits.at(-1)?.cappedBy).toBe('total');
+    // 미용·골프는 같은 영역(스포츠·미용·결혼)이라 한도 15,000원을 공유한다.
+    // 40,000 + 40,000 = 80,000이지만 영역 한도에서 잘린다.
+    expect(result.totalUsed).toBe(15_000);
+    expect(result.appliedBenefits.at(-1)?.cappedBy).toBe('per-month');
   });
 
   it('건당 최소금액 미달이면 혜택이 없다', () => {
@@ -466,7 +466,8 @@ describe('월 스냅샷', () => {
 
     expect(snap.previousSpend).toBe(800_000);
     expect(snap.appliedTier?.threshold).toBe(800_000);
-    expect(snap.totalBenefitCap).toBe(100_000);
+    // 이 카드는 통합 한도가 없다 — 영역별 한도로만 제어된다.
+    expect(snap.totalBenefitCap).toBeNull();
 
     // 이번 달 실적은 별개로 낮다
     expect(snap.currentSpend).toBe(10_000);

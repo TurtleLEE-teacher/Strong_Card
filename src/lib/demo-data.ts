@@ -47,7 +47,7 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
   // ── 6월: 지난달 실적 (이번 달 혜택 구간을 결정) ──────────────────────
   make('kb-tantandaero', '이마트 성수점', 420_000, '06-08', '생활'),
   make('kb-tantandaero', '신세계백화점', 310_000, '06-14'),
-  make('kb-tantandaero', '스타벅스 강남점', 48_000, '06-20', '카페'),
+  make('kb-tantandaero', '헤어살롱 청담', 180_000, '06-20'),
   make('samsung-amex-blue', 'GS25 역삼점', 180_000, '06-05'),
   make('samsung-amex-blue', '배달의민족', 150_000, '06-18'),
   make('shinhan-discount-plan', 'SK텔레콤', 89_000, '06-10'),
@@ -62,7 +62,7 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
   make('kb-tantandaero', '헤어살롱 청담', 120_000, '07-09'),
   make('kb-tantandaero', '롯데백화점', 240_000, '07-16'),
   make('kb-tantandaero', '스타벅스 역삼점', 28_000, '07-22', '카페'),
-  make('kb-tantandaero', 'GS칼텍스 주유소', 90_000, '07-25'),
+  make('kb-tantandaero', 'GS25 편의점', 90_000, '07-25'),
   make('kb-tantandaero', '서울시청 지방세', 340_000, '07-26'), // 실적 제외
 
   make('kb-coupang-wow', '쿠팡', 380_000, '07-04'),

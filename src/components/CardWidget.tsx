@@ -182,8 +182,15 @@ function BenefitSection({ card, snapshot }: { card: Card; snapshot: CardMonthlyS
   const allUsage = snapshot.benefitUsage
     .filter((u) => u.used > 0 || (u.cap !== null && u.cap > 0))
     .sort((a, b) => b.used - a.used);
-  const activeUsage = allUsage.slice(0, 4);
-  const hiddenCount = allUsage.length - activeUsage.length;
+
+  // 한도가 있는 영역은 전부 보여준다. 카드사 앱도 영역별로 나눠 보여주고,
+  // 그게 이 화면의 핵심 정보다. 4개로 잘라내면 "어느 영역이 남았나"라는
+  // 질문에 답을 못 한다.
+  // 한도 없는 적립(ZERO 등)만 길어질 수 있어 그쪽만 접는다.
+  const capped = allUsage.filter((u) => u.cap !== null);
+  const uncapped = allUsage.filter((u) => u.cap === null);
+  const activeUsage = [...capped, ...uncapped.slice(0, 4)];
+  const hiddenCount = uncapped.length - Math.min(uncapped.length, 4);
 
   // 통합 한도가 없다고 해서 한도가 없는 게 아니다. 쿠팡와우(4만/1.2만)와
   // Amex Blue(각 5천)는 통합 한도만 없고 룰별 한도는 엄연히 있다.
