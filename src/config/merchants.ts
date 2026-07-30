@@ -84,7 +84,156 @@ export const BRAND_ALIASES: Record<string, string[]> = {
 
   // 하이패스
   HIPASS: ['하이패스', '한국도로공사'],
+
+  // 카페 (추가)
+  HOLLYS: ['할리스', 'HOLLYS'],
+  ANGELINUS: ['엔제리너스'],
+  TOMNTOMS: ['탐앤탐스', 'TOMNTOMS'],
+  COFFEEBEAN: ['커피빈', 'COFFEEBEAN'],
+  GONGCHA: ['공차', 'GONGCHA'],
+  MAMMOTH: ['매머드커피', '매머드익스프레스'],
+  BANAPRESSO: ['바나프레소'],
+  DROPTOP: ['드롭탑'],
+
+  // 패스트푸드·외식
+  MCDONALDS: ['맥도날드', 'MCDONALDS'],
+  BURGERKING: ['버거킹', 'BURGERKING'],
+  LOTTERIA: ['롯데리아'],
+  MOMSTOUCH: ['맘스터치'],
+  SUBWAY: ['써브웨이', 'SUBWAY'],
+  KFC: ['KFC'],
+  NOBRANDBURGER: ['노브랜드버거'],
+  BHC: ['BHC', '비에이치씨'],
+  BBQ: ['BBQ'],
+  KYOCHON: ['교촌치킨', '교촌'],
+  GOOBNE: ['굽네치킨', '굽네'],
+  PIZZAHUT: ['피자헛'],
+  DOMINO: ['도미노피자', '도미노'],
+
+  // 편의점 (추가)
+  MINISTOP: ['미니스톱'],
+
+  // 마트·생활 (추가)
+  COSTCO: ['코스트코', 'COSTCO'],
+  NONGHYUP_HANARO: ['하나로마트', '농협하나로'],
+  DAISO: ['다이소', 'DAISO'],
+  OLIVEYOUNG: ['올리브영', 'OLIVEYOUNG'],
+  MUSINSA: ['무신사', 'MUSINSA'],
+  SSG: ['SSG닷컴', '에스에스지'],
+  GMARKET: ['지마켓', 'GMARKET'],
+  ELEVENST: ['11번가'],
+  AUCTION: ['옥션', 'AUCTION'],
+  NAVERPAY: ['네이버페이', 'NAVERPAY', '네이버파이낸셜'],
+  KAKAOPAY: ['카카오페이'],
+  ALIEXPRESS: ['ALIEXPRESS', '알리익스프레스'],
+  TEMU: ['TEMU', '테무'],
+
+  // 식품배송
+  KURLY: ['마켓컬리', '컬리', 'KURLY'],
+  OASIS: ['오아시스마켓', '오아시스'],
+
+  // 백화점·아울렛 (추가)
+  STARFIELD: ['스타필드'],
+  AKPLAZA: ['AK플라자'],
+  GALLERIA: ['갤러리아백화점', '갤러리아'],
+
+  // 교통 (추가)
+  SRT: ['SRT', '에스알'],
+  UBER_TAXI: ['UBER', '우버'],
+  ITAXI: ['아이엠택시', 'IM택시'],
+  PARKING: ['하이파킹', '아이파킹', '파킹클라우드'],
+
+  // 주유 (추가)
+  ALTTEUL: ['알뜰주유소'],
+
+  // 전기차 충전 (추가)
+  EV_CHARGE_HYUNDAI: ['이피트', 'E-PIT', '현대이피트'],
+  EV_CHARGE_STARKOFF: ['스타코프', 'STARKOFF'],
+  EV_CHARGE_PLUGLINK: ['플러그링크'],
+  EV_CHARGE_HUMAX: ['휴맥스이브이', '휴맥스EV'],
+
+  // 구독·디지털 (추가)
+  APPLE: ['APPLE', '애플', 'ITUNES'],
+  GOOGLE: ['GOOGLE', '구글'],
+  MICROSOFT: ['MICROSOFT', '마이크로소프트'],
+  OPENAI: ['OPENAI'],
+  ANTHROPIC: ['ANTHROPIC'],
+  MILLIE: ['밀리의서재', '밀리'],
+  RIDI: ['리디', 'RIDIBOOKS'],
+  MELON: ['멜론', 'MELON'],
+  GENIE: ['지니뮤직', 'GENIE'],
+  FLO: ['FLO', '플로'],
+  CHZZK: ['치지직'],
+  LAFTEL: ['라프텔'],
+  APPLE_TV: ['APPLETV'],
+
+  // 통신 (추가)
+  ALDDLE_PHONE: ['알뜰폰'],
+
+  // 공과금
+  KEPCO_BILL: ['한국전력공사', '전기요금'],
+  CITY_GAS: ['도시가스', '서울도시가스', '삼천리', '예스코'],
+  WATER_BILL: ['상하수도', '수도요금'],
+  APT_FEE: ['아파트관리비', '관리사무소'],
+
+  // 의료
+  PHARMACY: ['약국'],
+
+  // 여가
+  CGV: ['CGV'],
+  LOTTE_CINEMA: ['롯데시네마'],
+  MEGABOX: ['메가박스', 'MEGABOX'],
+  YES24: ['YES24', '예스24'],
+  KYOBO: ['교보문고', '교보'],
+  ALADIN: ['알라딘'],
 };
+
+/**
+ * 자주 쓰이는 브랜드 묶음.
+ *
+ * 카드마다 브랜드 목록을 따로 적으면, 새 가맹점을 추가할 때 한 카드에만
+ * 반영되고 나머지는 빠지는 일이 생긴다. 그러면 추천 결과가 조용히 틀린다.
+ * 공통 묶음은 여기서 한 번만 정의한다.
+ */
+export const BRAND_GROUPS = {
+  CAFE: [
+    'STARBUCKS', 'EDIYA', 'TWOSOME', 'MEGA_COFFEE', 'COMPOSE', 'PAIK_COFFEE',
+    'HOLLYS', 'ANGELINUS', 'TOMNTOMS', 'COFFEEBEAN', 'GONGCHA', 'MAMMOTH',
+    'BANAPRESSO', 'DROPTOP',
+  ],
+  CONVENIENCE: ['CU', 'GS25', 'SEVEN_ELEVEN', 'EMART24', 'MINISTOP'],
+  DELIVERY: ['BAEMIN', 'COUPANG_EATS', 'YOGIYO'],
+  DINING: [
+    'MCDONALDS', 'BURGERKING', 'LOTTERIA', 'MOMSTOUCH', 'SUBWAY', 'KFC',
+    'NOBRANDBURGER', 'BHC', 'BBQ', 'KYOCHON', 'GOOBNE', 'PIZZAHUT', 'DOMINO',
+  ],
+  MART: ['EMART', 'HOMEPLUS', 'LOTTE_MART', 'COSTCO', 'NONGHYUP_HANARO'],
+  DEPARTMENT: [
+    'SHINSEGAE_DEPT', 'LOTTE_DEPT', 'HYUNDAI_DEPT', 'GALLERIA', 'AKPLAZA', 'STARFIELD',
+  ],
+  FUEL: ['SK_ENERGY', 'GS_CALTEX', 'HYUNDAI_OILBANK', 'S_OIL', 'ALTTEUL'],
+  TRANSIT: ['KORAIL', 'SRT', 'TMONEY', 'KAKAO_T', 'UBER_TAXI', 'ITAXI'],
+  TELECOM: ['SKT', 'KT', 'LGU', 'ALDDLE_PHONE'],
+  /** OTT·음악·도서 등 정기결제 구독 */
+  SUBSCRIPTION: [
+    'NETFLIX', 'DISNEY_PLUS', 'WATCHA', 'TVING', 'WAVVE', 'YOUTUBE_PREMIUM',
+    'SPOTIFY', 'COUPANG_PLAY', 'APPLE_TV', 'LAFTEL', 'MELON', 'GENIE', 'FLO',
+    'MILLIE', 'RIDI', 'CHZZK',
+  ],
+  EV_CHARGE: [
+    'EV_CHARGE_ENVIRONMENT', 'EV_CHARGE_KEPCO', 'EV_CHARGE_CHAEVI',
+    'EV_CHARGE_EVERON', 'EV_CHARGE_HAEVICHI', 'EV_CHARGE_SK', 'EV_CHARGE_GS',
+    'EV_CHARGE_TESLA', 'EV_CHARGE_HYUNDAI', 'EV_CHARGE_STARKOFF',
+    'EV_CHARGE_PLUGLINK', 'EV_CHARGE_HUMAX',
+  ],
+  ONLINE_SHOPPING: [
+    'COUPANG', 'SSG', 'GMARKET', 'ELEVENST', 'AUCTION', 'MUSINSA',
+    'ALIEXPRESS', 'TEMU', 'NAVERPAY',
+  ],
+  LIVING: ['DAISO', 'OLIVEYOUNG'],
+  FRESH_DELIVERY: ['KURLY', 'OASIS'],
+  UTILITY: ['KEPCO_BILL', 'CITY_GAS', 'WATER_BILL', 'APT_FEE'],
+} as const;
 
 /**
  * 제거할 사업자 형태 접두·접미.

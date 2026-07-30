@@ -22,7 +22,12 @@ import type {
   Transaction,
 } from '@/lib/types';
 import { normalizeMerchant, resolveBrand } from '@/config/merchants';
-import { isRuleEffective, isRuleEffectiveInMonth, type MonthKey } from '@/lib/date';
+import {
+  isRuleEffective,
+  isRuleEffectiveInMonth,
+  isWithinHours,
+  type MonthKey,
+} from '@/lib/date';
 
 export interface BenefitResult {
   appliedBenefits: AppliedBenefit[];
@@ -57,6 +62,15 @@ export function resolveCap(
 /** 거래가 이 룰의 매칭 조건에 걸리는지 */
 export function matchesRule(rule: BenefitRule, tx: Transaction): boolean {
   const { match } = rule;
+
+  // 시각 조건이 있으면 가맹점을 보기 전에 먼저 거른다.
+  // (신한 Discount Plan의 DAY 07~15시 / NIGHT 18~22시)
+  if (
+    rule.timeWindow &&
+    !isWithinHours(tx.approvedAt, rule.timeWindow.startHour, rule.timeWindow.endHour)
+  ) {
+    return false;
+  }
   const hasCondition =
     !!match.brands?.length || !!match.keywords?.length || !!match.categories?.length;
 

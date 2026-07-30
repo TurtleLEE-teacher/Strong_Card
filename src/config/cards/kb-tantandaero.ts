@@ -1,3 +1,4 @@
+import { BRAND_GROUPS } from '../merchants';
 import type { Card } from '@/lib/types';
 import { COMMON_EXCLUSIONS } from '../exclusions';
 
@@ -9,6 +10,8 @@ import { COMMON_EXCLUSIONS } from '../exclusions';
  *
  * ⚠️ 구간별 통합 한도(30/50/70/100)는 공개 자료 기준 추정치다.
  *    실제 이용대금명세서와 대조해 Phase 4에서 확정할 것.
+ *
+ * 요율 출처: 데일리 10% / 트렌디 20% 요율은 KB 공식 안내 확인. 월 한도는 구간표 참조.
  */
 export const KB_TANTANDAERO: Card = {
   id: 'kb-tantandaero',
@@ -26,6 +29,8 @@ export const KB_TANTANDAERO: Card = {
     required: true,
     countsForeignSpend: true,
     installmentPolicy: 'full',
+    // 구간별 통합 한도는 공개 자료 기준 추정치. 명세서로 확정 필요.
+    tierConfidence: 'estimated',
     tiers: [
       { threshold: 0, label: '실적 미달', totalBenefitCap: 0 },
       { threshold: 300_000, label: '30만원', totalBenefitCap: 30_000 },
@@ -53,6 +58,7 @@ export const KB_TANTANDAERO: Card = {
         { threshold: 1_500_000, cap: 40_000 },
       ],
       priority: 10,
+      confidence: 'confirmed',
     },
     {
       id: 'tt-golf',
@@ -69,13 +75,17 @@ export const KB_TANTANDAERO: Card = {
         { threshold: 1_500_000, cap: 40_000 },
       ],
       priority: 10,
+      confidence: 'confirmed',
     },
     {
       id: 'tt-fresh-delivery',
       label: '식품배송 20%',
       type: 'discount',
       rate: 0.2,
-      match: { keywords: ['마켓컬리', '컬리', '오아시스마켓', '헬로네이처', '쿠팡프레시'] },
+      match: {
+        brands: [...BRAND_GROUPS.FRESH_DELIVERY],
+        keywords: ['헬로네이처', '쿠팡프레시'],
+      },
       minAmountPerTx: 10_000,
       capPerMonth: [
         { threshold: 0, cap: 0 },
@@ -85,6 +95,7 @@ export const KB_TANTANDAERO: Card = {
         { threshold: 1_500_000, cap: 40_000 },
       ],
       priority: 10,
+      confidence: 'confirmed',
     },
     {
       id: 'tt-interior',
@@ -101,6 +112,7 @@ export const KB_TANTANDAERO: Card = {
         { threshold: 1_500_000, cap: 40_000 },
       ],
       priority: 10,
+      confidence: 'confirmed',
     },
 
     // --- 데일리 서비스 10% ---
@@ -110,7 +122,7 @@ export const KB_TANTANDAERO: Card = {
       type: 'discount',
       rate: 0.1,
       match: {
-        brands: ['STARBUCKS', 'EDIYA', 'TWOSOME', 'MEGA_COFFEE', 'COMPOSE', 'PAIK_COFFEE'],
+        brands: [...BRAND_GROUPS.CAFE],
         categories: ['카페'],
       },
       minAmountPerTx: 5_000,
@@ -122,13 +134,14 @@ export const KB_TANTANDAERO: Card = {
         { threshold: 1_500_000, cap: 10_000 },
       ],
       priority: 20,
+      confidence: 'confirmed',
     },
     {
       id: 'td-dept',
       label: '백화점 10%',
       type: 'discount',
       rate: 0.1,
-      match: { brands: ['SHINSEGAE_DEPT', 'LOTTE_DEPT', 'HYUNDAI_DEPT'] },
+      match: { brands: [...BRAND_GROUPS.DEPARTMENT] },
       minAmountPerTx: 10_000,
       capPerMonth: [
         { threshold: 0, cap: 0 },
@@ -138,6 +151,7 @@ export const KB_TANTANDAERO: Card = {
         { threshold: 1_500_000, cap: 10_000 },
       ],
       priority: 20,
+      confidence: 'confirmed',
     },
     {
       id: 'td-taxi',
@@ -153,13 +167,14 @@ export const KB_TANTANDAERO: Card = {
         { threshold: 1_500_000, cap: 10_000 },
       ],
       priority: 20,
+      confidence: 'confirmed',
     },
     {
       id: 'td-oil',
       label: '주유 10%',
       type: 'discount',
       rate: 0.1,
-      match: { brands: ['SK_ENERGY', 'GS_CALTEX', 'HYUNDAI_OILBANK', 'S_OIL'] },
+      match: { brands: [...BRAND_GROUPS.FUEL] },
       capPerMonth: [
         { threshold: 0, cap: 0 },
         { threshold: 300_000, cap: 5_000 },
@@ -168,13 +183,14 @@ export const KB_TANTANDAERO: Card = {
         { threshold: 1_500_000, cap: 10_000 },
       ],
       priority: 20,
+      confidence: 'confirmed',
     },
     {
       id: 'td-mart',
       label: '마트 10%',
       type: 'discount',
       rate: 0.1,
-      match: { brands: ['EMART', 'HOMEPLUS', 'LOTTE_MART'] },
+      match: { brands: [...BRAND_GROUPS.MART] },
       minAmountPerTx: 10_000,
       capPerMonth: [
         { threshold: 0, cap: 0 },
@@ -184,6 +200,7 @@ export const KB_TANTANDAERO: Card = {
         { threshold: 1_500_000, cap: 10_000 },
       ],
       priority: 20,
+      confidence: 'confirmed',
     },
   ],
 };

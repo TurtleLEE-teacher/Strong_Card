@@ -10,6 +10,8 @@ import { COMMON_EXCLUSIONS } from '../exclusions';
  * 프로모션 종료를 effectiveUntil로 관리한다. 날짜가 지나면 자동으로
  * 기본 룰로 넘어가므로 코드 수정 없이 숫자가 맞는다.
  * https://card-lounge.toss.im/card/6090
+ *
+ * 요율 출처: 쿠팡 4%/2%, 그 외 1.2%/0.2% 및 월 한도 모두 확인.
  */
 export const KB_COUPANG_WOW: Card = {
   id: 'kb-coupang-wow',
@@ -27,6 +29,7 @@ export const KB_COUPANG_WOW: Card = {
     required: false,
     countsForeignSpend: true,
     installmentPolicy: 'full',
+    tierConfidence: 'confirmed', // 무실적 카드 — 구간 자체가 없다
     tiers: [{ threshold: 0, label: '실적 조건 없음', totalBenefitCap: null }],
     // 실적 조건은 없지만 제외 규칙은 여전히 필요하다.
     // 이게 없으면 catch-all 룰(그 외 0.2%)이 세금·상품권 결제에도 적립을 붙인다.
@@ -44,6 +47,7 @@ export const KB_COUPANG_WOW: Card = {
       capPerMonth: 40_000,
       effectiveUntil: '2026-10-15',
       priority: 10,
+      confidence: 'confirmed',
       notes: '프로모션 종료 후 cw-coupang-base(2%)로 자동 전환',
     },
     {
@@ -55,6 +59,7 @@ export const KB_COUPANG_WOW: Card = {
       capPerMonth: 12_000,
       effectiveUntil: '2026-10-15',
       priority: 90,
+      confidence: 'confirmed',
     },
 
     // --- 프로모션 종료 후 기본 ---
@@ -67,6 +72,7 @@ export const KB_COUPANG_WOW: Card = {
       capPerMonth: 20_000,
       effectiveFrom: '2026-10-16',
       priority: 10,
+      confidence: 'confirmed',
     },
     {
       id: 'cw-other-base',
@@ -77,6 +83,7 @@ export const KB_COUPANG_WOW: Card = {
       capPerMonth: 2_000,
       effectiveFrom: '2026-10-16',
       priority: 90,
+      confidence: 'confirmed',
     },
   ],
 };

@@ -1,3 +1,4 @@
+import { BRAND_GROUPS } from '../merchants';
 import type { Card } from '@/lib/types';
 import { COMMON_EXCLUSIONS } from '../exclusions';
 
@@ -9,6 +10,8 @@ import { COMMON_EXCLUSIONS } from '../exclusions';
  *
  * 국내·외 모든 가맹점 1% / 생활 필수 영역 2.5%
  * https://www.hyundaicard.com/upload/card/20201124_ZERO-Edition2포인트형.pdf
+ *
+ * 요율 출처: 전 가맹점 1% / 생활 2.5%, 한도 없음 확인.
  */
 export const HYUNDAI_ZERO_ED2: Card = {
   id: 'hyundai-zero-ed2',
@@ -26,6 +29,7 @@ export const HYUNDAI_ZERO_ED2: Card = {
     required: false,
     countsForeignSpend: true,
     installmentPolicy: 'full',
+    tierConfidence: 'confirmed', // 무실적 카드 — 구간 자체가 없다
     tiers: [{ threshold: 0, label: '실적 조건 없음', totalBenefitCap: null }],
     // 실적 조건은 없지만 세금·상품권 등은 적립 대상에서 빠진다.
     exclusions: COMMON_EXCLUSIONS,
@@ -39,15 +43,17 @@ export const HYUNDAI_ZERO_ED2: Card = {
       rate: 0.025,
       match: {
         brands: [
-          'EMART', 'HOMEPLUS', 'LOTTE_MART',
-          'CU', 'GS25', 'SEVEN_ELEVEN', 'EMART24',
-          'SKT', 'KT', 'LGU',
-          'SK_ENERGY', 'GS_CALTEX', 'HYUNDAI_OILBANK', 'S_OIL',
+          ...BRAND_GROUPS.MART,
+          ...BRAND_GROUPS.CONVENIENCE,
+          ...BRAND_GROUPS.TELECOM,
+          ...BRAND_GROUPS.FUEL,
+          ...BRAND_GROUPS.LIVING,
         ],
         categories: ['생활', '교통'],
       },
       capPerMonth: null, // 한도 없음
       priority: 10,
+      confidence: 'confirmed',
     },
     {
       id: 'zero-all',
@@ -57,6 +63,7 @@ export const HYUNDAI_ZERO_ED2: Card = {
       match: {},
       capPerMonth: null, // 한도 없음
       priority: 90,
+      confidence: 'confirmed',
     },
   ],
 };

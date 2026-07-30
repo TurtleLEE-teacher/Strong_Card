@@ -1,3 +1,4 @@
+import { BRAND_GROUPS } from '../merchants';
 import type { Card } from '@/lib/types';
 import { COMMON_EXCLUSIONS } from '../exclusions';
 
@@ -11,6 +12,8 @@ import { COMMON_EXCLUSIONS } from '../exclusions';
  * ⚠️ 하이패스는 공통 실적 제외 항목('무승인 전표')이면서 동시에 혜택 대상이다.
  *    즉 하이패스 결제는 실적에는 안 잡히지만 캐시백은 받는다.
  *    이 카드에 한해 하이패스 제외 규칙을 유지하되 혜택 룰은 별도로 둔다.
+ *
+ * 요율 출처: 충전 30%/50%, 하이패스 10% 및 각 한도 확인.
  */
 export const SHINHAN_EV: Card = {
   id: 'shinhan-ev',
@@ -29,6 +32,8 @@ export const SHINHAN_EV: Card = {
     required: true,
     countsForeignSpend: true,
     installmentPolicy: 'full',
+    // 30/60만 구간과 충전 30%/50%는 확인됨. 통합 한도 2.5만은 합산 추정.
+    tierConfidence: 'estimated',
     tiers: [
       { threshold: 0, label: '실적 미달', totalBenefitCap: 0 },
       { threshold: 300_000, label: '30만원', totalBenefitCap: 25_000 },
@@ -47,11 +52,7 @@ export const SHINHAN_EV: Card = {
       type: 'discount',
       rate: 0.3,
       match: {
-        brands: [
-          'EV_CHARGE_ENVIRONMENT', 'EV_CHARGE_KEPCO', 'EV_CHARGE_CHAEVI',
-          'EV_CHARGE_EVERON', 'EV_CHARGE_HAEVICHI', 'EV_CHARGE_SK',
-          'EV_CHARGE_GS', 'EV_CHARGE_TESLA',
-        ],
+        brands: [...BRAND_GROUPS.EV_CHARGE],
         keywords: ['전기차충전', '충전소', 'EV충전'],
       },
       capPerMonth: [
@@ -60,6 +61,7 @@ export const SHINHAN_EV: Card = {
         { threshold: 600_000, cap: 0 }, // 60만 구간에서는 ev-charge-50이 대신 적용
       ],
       priority: 20,
+      confidence: 'confirmed',
     },
     {
       id: 'ev-charge-50',
@@ -67,11 +69,7 @@ export const SHINHAN_EV: Card = {
       type: 'discount',
       rate: 0.5,
       match: {
-        brands: [
-          'EV_CHARGE_ENVIRONMENT', 'EV_CHARGE_KEPCO', 'EV_CHARGE_CHAEVI',
-          'EV_CHARGE_EVERON', 'EV_CHARGE_HAEVICHI', 'EV_CHARGE_SK',
-          'EV_CHARGE_GS', 'EV_CHARGE_TESLA',
-        ],
+        brands: [...BRAND_GROUPS.EV_CHARGE],
         keywords: ['전기차충전', '충전소', 'EV충전'],
       },
       capPerMonth: [
@@ -80,6 +78,7 @@ export const SHINHAN_EV: Card = {
         { threshold: 600_000, cap: 20_000 },
       ],
       priority: 10, // 50%를 먼저 시도한다
+      confidence: 'confirmed',
     },
     {
       id: 'ev-hipass',
@@ -93,6 +92,7 @@ export const SHINHAN_EV: Card = {
         { threshold: 600_000, cap: 5_000 },
       ],
       priority: 30,
+      confidence: 'confirmed',
       applyToExcludedSpend: true,
       notes: '실적에는 산입되지 않지만(무승인 전표) 캐시백은 받는다',
     },

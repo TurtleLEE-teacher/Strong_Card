@@ -74,6 +74,28 @@ export function daysRemainingInMonth(now: Date = new Date()): number {
   return last - today;
 }
 
+/**
+ * UTC ISO에서 KST 기준 '시'(0~23)를 뽑는다.
+ *
+ * 신한 Discount Plan처럼 승인 시각대에 따라 할인 영역이 갈리는 카드가 있다.
+ * (DAY 카페·음식점 07~15시 / NIGHT 편의점·배달앱 18~22시)
+ * UTC 시각으로 판정하면 9시간이 어긋나 전혀 다른 영역이 적용된다.
+ */
+export function kstHour(isoUtc: string): number {
+  return new Date(new Date(isoUtc).getTime() + KST_OFFSET_MS).getUTCHours();
+}
+
+/**
+ * KST 시각이 [startHour, endHour) 구간에 드는지.
+ * 자정을 넘는 구간(22~02시 등)도 처리한다.
+ */
+export function isWithinHours(isoUtc: string, startHour: number, endHour: number): boolean {
+  const hour = kstHour(isoUtc);
+  return startHour <= endHour
+    ? hour >= startHour && hour < endHour
+    : hour >= startHour || hour < endHour;
+}
+
 /** UTC ISO를 KST 'YYYY-MM-DD' 로 */
 export function toKstDateString(isoUtc: string): string {
   const kst = new Date(new Date(isoUtc).getTime() + KST_OFFSET_MS);

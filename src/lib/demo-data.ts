@@ -16,8 +16,11 @@ function make(
   krwAmount: number,
   day: string,
   category: TxCategory | null = null,
+  /** KST 기준 시각. Discount Plan은 시간대에 따라 할인 영역이 갈린다. */
+  kstHour = 12,
 ): Transaction {
   n += 1;
+  const [month, date] = day.split('-').map(Number);
   return {
     id: `demo-${n}`,
     title,
@@ -25,8 +28,8 @@ function make(
     rawAmount: krwAmount,
     currency: 'KRW',
     krwAmount,
-    // 'MM-DD' → KST 정오 기준 UTC
-    approvedAt: new Date(`2026-${day}T03:00:00Z`).toISOString(),
+    // KST 시각을 UTC로 (−9시간)
+    approvedAt: new Date(Date.UTC(2026, month - 1, date, kstHour - 9, 0, 0)).toISOString(),
     issuer: null,
     last4: null,
     cardId,
@@ -75,10 +78,12 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
   make('hyundai-zero-ed2', '무신사', 158_000, '07-15'),
   make('hyundai-zero-ed2', 'SK에너지', 78_000, '07-23'),
 
-  make('shinhan-discount-plan', '이디야커피', 36_000, '07-02', '카페'),
-  make('shinhan-discount-plan', 'KT', 92_000, '07-10'),
-  make('shinhan-discount-plan', 'GS25', 74_000, '07-17'),
-  make('shinhan-discount-plan', '한식당 미가', 185_000, '07-24', '식비'),
+  make('shinhan-discount-plan', '이디야커피', 36_000, '07-02', '카페', 9), // DAY 창 안
+  make('shinhan-discount-plan', '한국전력공사 전기요금', 92_000, '07-10'), // 공과금 할인
+  make('shinhan-discount-plan', 'GS25', 74_000, '07-17', null, 20), // NIGHT 창 안
+  make('shinhan-discount-plan', 'GS25', 22_000, '07-19', null, 13), // NIGHT 창 밖 — 할인 없음
+  make('shinhan-discount-plan', '한식당 미가', 185_000, '07-24', '식비', 12),
+  make('shinhan-discount-plan', 'NETFLIX', 17_000, '07-05', '구독', 3),
 
   make('shinhan-ev', '환경부전기차충전', 88_000, '07-05'),
   make('shinhan-ev', '차지비 충전소', 64_000, '07-13'),

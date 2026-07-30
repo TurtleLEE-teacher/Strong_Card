@@ -111,6 +111,11 @@ export interface PerformancePolicy {
    * 'monthly'= 매월 분할금만 인정
    */
   installmentPolicy: 'full' | 'monthly';
+  /**
+   * 구간표(tiers)의 숫자 출처. 기본 'estimated'.
+   * 추정 구간은 설정 화면에 '확인 필요'로 노출된다.
+   */
+  tierConfidence?: RuleConfidence;
 }
 
 /** 구간별로 달라지는 한도. threshold는 SpendTier.threshold와 맞춘다. */
@@ -130,11 +135,37 @@ export interface MerchantMatcher {
   excludeKeywords?: string[];
 }
 
+/**
+ * 승인 시각대 조건 (KST). endHour는 포함하지 않는다.
+ * 자정을 넘는 구간도 허용한다 (예: 22~02시).
+ */
+export interface TimeWindow {
+  startHour: number;
+  endHour: number;
+  /** 화면에 보여줄 설명. 예: '07~15시' */
+  label: string;
+}
+
+/**
+ * 이 룰의 숫자가 어디서 왔는지.
+ *
+ * 'confirmed'  — 카드사 공식 자료나 이용대금명세서로 확인함
+ * 'estimated'  — 공개 자료 기준 추정. **화면에 표시해 사용자가 검증하게 한다.**
+ *
+ * 추정치를 확정인 척 보여주면 사용자는 틀린 숫자를 믿게 되고, 그게
+ * 이 앱에서 가장 나쁜 실패다.
+ */
+export type RuleConfidence = 'confirmed' | 'estimated';
+
 export interface BenefitRule {
   id: string;
   label: string;
   type: 'discount' | 'point';
   match: MerchantMatcher;
+  /** 승인 시각 조건. 없으면 시간 무관. */
+  timeWindow?: TimeWindow;
+  /** 이 룰의 숫자 출처. 기본 'estimated'. */
+  confidence?: RuleConfidence;
   /** 할인·적립률. 0.2 = 20% */
   rate: number;
   /** 건당 최소 결제금액. 미만이면 혜택 없음. */

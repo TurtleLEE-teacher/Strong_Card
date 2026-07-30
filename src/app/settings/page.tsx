@@ -7,9 +7,44 @@ import { WARNING_DAYS } from '@/lib/alerts/rules';
 
 export const revalidate = 300;
 
+/**
+ * 아직 검증되지 않은 숫자를 모은다.
+ * 구간표와 혜택 룰 각각의 `confidence`를 본다.
+ */
+function collectUnverified() {
+  const items: { key: string; cardName: string; label: string; detail: string }[] = [];
+
+  for (const card of ACTIVE_CARDS) {
+    if (card.performance.required && card.performance.tierConfidence !== 'confirmed') {
+      items.push({
+        key: `${card.id}:tiers`,
+        cardName: card.shortName,
+        label: '실적 구간표',
+        detail: card.performance.tiers
+          .filter((t) => t.threshold > 0)
+          .map((t) => `${t.label} → ${t.totalBenefitCap?.toLocaleString('ko-KR') ?? '무제한'}원`)
+          .join(' · '),
+      });
+    }
+
+    for (const rule of card.benefits) {
+      if (rule.confidence === 'confirmed') continue;
+      items.push({
+        key: `${card.id}:${rule.id}`,
+        cardName: card.shortName,
+        label: rule.label,
+        detail: `요율 ${Number((rule.rate * 100).toFixed(2))}%`,
+      });
+    }
+  }
+
+  return items;
+}
+
 export default async function SettingsPage() {
   const { unmapped, isDemo, error } = await getDashboardData();
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null;
+  const unverified = collectUnverified();
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-6 pb-16 sm:px-6">
@@ -99,6 +134,39 @@ export default async function SettingsPage() {
           카드를 추가하거나 뒷 4자리를 바꾸려면 <code>src/config/cards/</code>를 수정하세요.
         </p>
       </Panel>
+
+      {/*
+        추정치를 확정인 척 보여주면 사용자는 틀린 숫자를 믿게 된다.
+        어떤 숫자가 아직 검증되지 않았는지 여기서 계속 드러낸다.
+      */}
+      {unverified.length > 0 && (
+        <Panel title={`확인이 필요한 혜택 규칙 ${unverified.length}건`}>
+          <p className="mb-3 text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            공개 자료만으로 확정하지 못한 숫자입니다. 카드사 이용대금명세서나 앱의 혜택
+            상세와 비교해 다르면 <code>src/config/cards/</code>를 고쳐주세요. 카드 상세의{' '}
+            <strong>카드사 누계 대조</strong>도 검증에 도움이 됩니다.
+          </p>
+          <ul className="space-y-2">
+            {unverified.map((item) => (
+              <li key={item.key} className="flex items-start gap-2.5">
+                <span
+                  aria-hidden
+                  className="mt-1.5 size-2 shrink-0 rounded-full"
+                  style={{ background: 'var(--status-serious)' }}
+                />
+                <div className="min-w-0">
+                  <p className="text-xs" style={{ color: 'var(--text-primary)' }}>
+                    {item.cardName} · {item.label}
+                  </p>
+                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    {item.detail}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       <Panel title="데이터 소스">
         {isDemo ? (
