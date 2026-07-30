@@ -5,13 +5,19 @@ import { COMMON_EXCLUSIONS } from '../exclusions';
 /**
  * KB국민 탄탄대로 Miz&Mr 티타늄카드
  *
- * 데일리 서비스 10% / 트렌디 서비스 20% 할인, 월 최대 10만원.
+ * 전월 40만원 이상부터 서비스 제공. 월 통합 할인한도 최대 10만원.
+ *
+ *   트렌디 서비스 20% — 미용·화장품, 스포츠·골프, 결혼서비스·가전,
+ *                      SPA패션, 식품배송, 인테리어
+ *   데일리 서비스 10% — 커피·베이커리·아이스크림(건당 2만원 이상),
+ *                      대중교통, 택시, 백화점
+ *
+ * 영역별 세부 한도는 공개돼 있지 않다. 임의로 지어내는 대신 비워 두고
+ * **통합 한도만** 적용한다. 없는 숫자를 만들어 넣으면 틀린 값을 확정인 척
+ * 보여주게 된다.
+ *
+ * 출처: KB국민카드 상품 안내, 카드고릴라
  * https://m.kbcard.com/CXHIACRC0002.cms?allianceCode=09230&mainCC=b
- *
- * ⚠️ 구간별 통합 한도(30/50/70/100)는 공개 자료 기준 추정치다.
- *    실제 이용대금명세서와 대조해 Phase 4에서 확정할 것.
- *
- * 요율 출처: 데일리 10% / 트렌디 20% 요율은 KB 공식 안내 확인. 월 한도는 구간표 참조.
  */
 export const KB_TANTANDAERO: Card = {
   id: 'kb-tantandaero',
@@ -21,7 +27,7 @@ export const KB_TANTANDAERO: Card = {
   shortName: '탄탄대로',
   last4: ['6089'],
   active: true,
-  annualFee: 40_000,
+  annualFee: 30_000, // JCB·Master 모두 3만원
   slot: 1,
   productPageUrl: 'https://m.kbcard.com/CXHIACRC0002.cms?allianceCode=09230&mainCC=b',
 
@@ -29,51 +35,63 @@ export const KB_TANTANDAERO: Card = {
     required: true,
     countsForeignSpend: true,
     installmentPolicy: 'full',
-    // 구간별 통합 한도는 공개 자료 기준 추정치. 명세서로 확정 필요.
-    tierConfidence: 'estimated',
+    // 40만 → 7만원, 80만 → 10만원. 두 구간 모두 공개 자료로 확인.
+    tierConfidence: 'confirmed',
     tiers: [
       { threshold: 0, label: '실적 미달', totalBenefitCap: 0 },
-      { threshold: 300_000, label: '30만원', totalBenefitCap: 30_000 },
-      { threshold: 700_000, label: '70만원', totalBenefitCap: 50_000 },
-      { threshold: 1_000_000, label: '100만원', totalBenefitCap: 70_000 },
-      { threshold: 1_500_000, label: '150만원', totalBenefitCap: 100_000 },
+      { threshold: 400_000, label: '40만원', totalBenefitCap: 70_000 },
+      { threshold: 800_000, label: '80만원', totalBenefitCap: 100_000 },
     ],
     exclusions: COMMON_EXCLUSIONS,
   },
 
   benefits: [
-    // --- 트렌디 서비스 20% ---
+    // ── 트렌디 서비스 20% ──────────────────────────────────────────────
     {
       id: 'tt-beauty',
-      label: '미용 20%',
+      label: '미용·화장품 20%',
       type: 'discount',
       rate: 0.2,
-      match: { keywords: ['미용실', '헤어', '네일', '피부관리', '에스테틱', '왁싱'] },
-      minAmountPerTx: 10_000,
-      capPerMonth: [
-        { threshold: 0, cap: 0 },
-        { threshold: 300_000, cap: 10_000 },
-        { threshold: 700_000, cap: 20_000 },
-        { threshold: 1_000_000, cap: 30_000 },
-        { threshold: 1_500_000, cap: 40_000 },
-      ],
+      match: {
+        brands: ['OLIVEYOUNG'],
+        keywords: ['미용실', '헤어', '네일', '피부과', '피부관리', '에스테틱', '왁싱', '화장품'],
+      },
       priority: 10,
       confidence: 'confirmed',
     },
     {
       id: 'tt-golf',
-      label: '골프 20%',
+      label: '스포츠·골프 20%',
       type: 'discount',
       rate: 0.2,
-      match: { keywords: ['골프', 'GOLF', '스크린골프', 'CC', '컨트리클럽'] },
-      minAmountPerTx: 10_000,
-      capPerMonth: [
-        { threshold: 0, cap: 0 },
-        { threshold: 300_000, cap: 10_000 },
-        { threshold: 700_000, cap: 20_000 },
-        { threshold: 1_000_000, cap: 30_000 },
-        { threshold: 1_500_000, cap: 40_000 },
-      ],
+      match: {
+        keywords: ['골프', 'GOLF', '스크린골프', '컨트리클럽', '스포츠센터', '헬스', '피트니스'],
+      },
+      priority: 10,
+      confidence: 'confirmed',
+    },
+    {
+      id: 'tt-wedding-appliance',
+      label: '결혼서비스·가전 20%',
+      type: 'discount',
+      rate: 0.2,
+      match: {
+        keywords: [
+          '웨딩', '결혼', '예식장', '하이마트', '전자랜드',
+          '삼성디지털프라자', 'LG베스트샵',
+        ],
+      },
+      priority: 10,
+      confidence: 'confirmed',
+    },
+    {
+      id: 'tt-spa-fashion',
+      label: 'SPA패션 20%',
+      type: 'discount',
+      rate: 0.2,
+      match: {
+        keywords: ['ZARA', '자라', 'H&M', '유니클로', 'UNIQLO', 'SPAO', '스파오', '탑텐', 'TOPTEN'],
+      },
       priority: 10,
       confidence: 'confirmed',
     },
@@ -83,17 +101,9 @@ export const KB_TANTANDAERO: Card = {
       type: 'discount',
       rate: 0.2,
       match: {
-        brands: [...BRAND_GROUPS.FRESH_DELIVERY],
-        keywords: ['헬로네이처', '쿠팡프레시'],
+        brands: [...BRAND_GROUPS.FRESH_DELIVERY, 'BAEMIN'],
+        keywords: ['배민찬', '헬로네이처'],
       },
-      minAmountPerTx: 10_000,
-      capPerMonth: [
-        { threshold: 0, cap: 0 },
-        { threshold: 300_000, cap: 10_000 },
-        { threshold: 700_000, cap: 20_000 },
-        { threshold: 1_000_000, cap: 30_000 },
-        { threshold: 1_500_000, cap: 40_000 },
-      ],
       priority: 10,
       confidence: 'confirmed',
     },
@@ -102,37 +112,45 @@ export const KB_TANTANDAERO: Card = {
       label: '인테리어 20%',
       type: 'discount',
       rate: 0.2,
-      match: { keywords: ['한샘', '리바트', '이케아', 'IKEA', '오늘의집', '인테리어', '가구'] },
-      minAmountPerTx: 10_000,
-      capPerMonth: [
-        { threshold: 0, cap: 0 },
-        { threshold: 300_000, cap: 10_000 },
-        { threshold: 700_000, cap: 20_000 },
-        { threshold: 1_000_000, cap: 30_000 },
-        { threshold: 1_500_000, cap: 40_000 },
-      ],
+      match: {
+        keywords: ['이케아', 'IKEA', '무인양품', 'MUJI', '까사미아', '한샘', '리바트', '인테리어'],
+      },
       priority: 10,
       confidence: 'confirmed',
     },
 
-    // --- 데일리 서비스 10% ---
+    // ── 데일리 서비스 10% ──────────────────────────────────────────────
     {
       id: 'td-coffee',
-      label: '커피 10%',
+      label: '커피·베이커리·아이스크림 10%',
       type: 'discount',
       rate: 0.1,
       match: {
         brands: [...BRAND_GROUPS.CAFE],
         categories: ['카페'],
+        keywords: ['베이커리', '파리바게뜨', '뚜레쥬르', '배스킨라빈스', '설빙'],
       },
-      minAmountPerTx: 5_000,
-      capPerMonth: [
-        { threshold: 0, cap: 0 },
-        { threshold: 300_000, cap: 5_000 },
-        { threshold: 700_000, cap: 10_000 },
-        { threshold: 1_000_000, cap: 10_000 },
-        { threshold: 1_500_000, cap: 10_000 },
-      ],
+      // 건당 2만원 이상 이용 시에만 할인된다. 5천원으로 잘못 잡으면
+      // 소액 결제에 있지도 않은 할인이 붙는다.
+      minAmountPerTx: 20_000,
+      priority: 20,
+      confidence: 'confirmed',
+    },
+    {
+      id: 'td-transit',
+      label: '대중교통 10%',
+      type: 'discount',
+      rate: 0.1,
+      match: { brands: ['TMONEY'], keywords: ['버스', '지하철', '교통카드'] },
+      priority: 20,
+      confidence: 'confirmed',
+    },
+    {
+      id: 'td-taxi',
+      label: '택시 10%',
+      type: 'discount',
+      rate: 0.1,
+      match: { brands: ['KAKAO_T', 'UBER_TAXI', 'ITAXI'], keywords: ['택시'] },
       priority: 20,
       confidence: 'confirmed',
     },
@@ -142,63 +160,6 @@ export const KB_TANTANDAERO: Card = {
       type: 'discount',
       rate: 0.1,
       match: { brands: [...BRAND_GROUPS.DEPARTMENT] },
-      minAmountPerTx: 10_000,
-      capPerMonth: [
-        { threshold: 0, cap: 0 },
-        { threshold: 300_000, cap: 5_000 },
-        { threshold: 700_000, cap: 10_000 },
-        { threshold: 1_000_000, cap: 10_000 },
-        { threshold: 1_500_000, cap: 10_000 },
-      ],
-      priority: 20,
-      confidence: 'confirmed',
-    },
-    {
-      id: 'td-taxi',
-      label: '택시 10%',
-      type: 'discount',
-      rate: 0.1,
-      match: { brands: ['KAKAO_T'], keywords: ['택시'] },
-      capPerMonth: [
-        { threshold: 0, cap: 0 },
-        { threshold: 300_000, cap: 5_000 },
-        { threshold: 700_000, cap: 10_000 },
-        { threshold: 1_000_000, cap: 10_000 },
-        { threshold: 1_500_000, cap: 10_000 },
-      ],
-      priority: 20,
-      confidence: 'confirmed',
-    },
-    {
-      id: 'td-oil',
-      label: '주유 10%',
-      type: 'discount',
-      rate: 0.1,
-      match: { brands: [...BRAND_GROUPS.FUEL] },
-      capPerMonth: [
-        { threshold: 0, cap: 0 },
-        { threshold: 300_000, cap: 5_000 },
-        { threshold: 700_000, cap: 10_000 },
-        { threshold: 1_000_000, cap: 10_000 },
-        { threshold: 1_500_000, cap: 10_000 },
-      ],
-      priority: 20,
-      confidence: 'confirmed',
-    },
-    {
-      id: 'td-mart',
-      label: '마트 10%',
-      type: 'discount',
-      rate: 0.1,
-      match: { brands: [...BRAND_GROUPS.MART] },
-      minAmountPerTx: 10_000,
-      capPerMonth: [
-        { threshold: 0, cap: 0 },
-        { threshold: 300_000, cap: 5_000 },
-        { threshold: 700_000, cap: 10_000 },
-        { threshold: 1_000_000, cap: 10_000 },
-        { threshold: 1_500_000, cap: 10_000 },
-      ],
       priority: 20,
       confidence: 'confirmed',
     },

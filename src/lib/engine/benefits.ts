@@ -72,7 +72,10 @@ export function matchesRule(rule: BenefitRule, tx: Transaction): boolean {
     return false;
   }
   const hasCondition =
-    !!match.brands?.length || !!match.keywords?.length || !!match.categories?.length;
+    !!match.paymentKinds?.length ||
+    !!match.brands?.length ||
+    !!match.keywords?.length ||
+    !!match.categories?.length;
 
   const merchantText = normalizeMerchant(
     [tx.title, tx.merchant].filter(Boolean).join(' '),
@@ -86,6 +89,11 @@ export function matchesRule(rule: BenefitRule, tx: Transaction): boolean {
 
   // 조건이 하나도 없으면 catch-all 룰 (예: ZERO 전 가맹점 1%)
   if (!hasCondition) return true;
+
+  // 결제 구분은 가맹점과 무관하게 판정한다 (해외 결제 적립 등).
+  if (match.paymentKinds?.length && tx.paymentKind) {
+    if (match.paymentKinds.includes(tx.paymentKind)) return true;
+  }
 
   if (match.brands?.length) {
     const brand = resolveBrand(tx.merchant ?? tx.title);

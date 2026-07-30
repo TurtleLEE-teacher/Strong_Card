@@ -178,3 +178,60 @@ describe('브랜드 사전 확장', () => {
     expect(snapshot.totalBenefitUsed).toBe(2_000);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Amex Blue 해외 결제 — 전월실적 조건이 없는 유일한 혜택
+// ---------------------------------------------------------------------------
+
+describe('Amex Blue 해외 결제 5% 적립', () => {
+  const amex = CARDS_BY_ID['samsung-amex-blue'];
+
+  function overseasTx(krwAmount: number): Transaction {
+    return {
+      ...txAt('ANTHROPIC,PBC', krwAmount, '2026-07-10', 12),
+      cardId: 'samsung-amex-blue',
+      issuer: '삼성',
+      last4: '2055',
+      paymentKind: '해외',
+      currency: 'USD',
+    };
+  }
+
+  it('실적이 0원이어도 해외 적립은 나온다', () => {
+    // 이 카드에서 해외 적립만 전월실적과 무관하다. 통합 한도를 두면
+    // 실적 미달일 때 이 적립까지 0원이 되어버린다.
+    const snapshot = buildSnapshot(amex, [overseasTx(100_000)], '2026-07');
+    expect(snapshot.previousSpend).toBe(0);
+    expect(snapshot.appliedTier?.threshold).toBe(0);
+    expect(snapshot.totalBenefitUsed).toBe(5_000); // 5%
+  });
+
+  it('국내 결제에는 해외 룰이 붙지 않는다', () => {
+    const snapshot = buildSnapshot(
+      amex,
+      [txAt('아무데나', 100_000, '2026-07-10', 12)],
+      '2026-07',
+    );
+    // 실적 미달이라 국내 혜택은 전부 0원
+    expect(snapshot.totalBenefitUsed).toBe(0);
+  });
+
+  it('해외 적립은 월 3만 포인트에서 잘린다', () => {
+    const snapshot = buildSnapshot(amex, [overseasTx(1_000_000)], '2026-07');
+    expect(snapshot.totalBenefitUsed).toBe(30_000);
+  });
+
+  it('실적을 채우면 국내 혜택도 함께 잡힌다', () => {
+    const snapshot = buildSnapshot(
+      amex,
+      [
+        { ...txAt('아무데나', 400_000, '2026-06-15', 12), cardId: 'samsung-amex-blue' },
+        { ...txAt('스타벅스', 20_000, '2026-07-10', 12), cardId: 'samsung-amex-blue' },
+        overseasTx(100_000),
+      ],
+      '2026-07',
+    );
+    // 스벅 20% 4,000 + 해외 5% 5,000
+    expect(snapshot.totalBenefitUsed).toBe(9_000);
+  });
+});

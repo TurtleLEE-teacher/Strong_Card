@@ -32,9 +32,9 @@ const tantan = CARDS_BY_ID['kb-tantandaero'];
 const zero = CARDS_BY_ID['hyundai-zero-ed2'];
 
 describe('실적 미달 경고', () => {
-  // 6월 70만 실적 → 7월 70만 구간 적용. 7월에는 10만원만 씀.
+  // 6월 40만 실적 → 7월 40만 구간 적용. 7월에는 10만원만 썼다.
   const transactions = [
-    tx('kb-tantandaero', '아방가르드', 700_000, '06-15'),
+    tx('kb-tantandaero', '아방가르드', 400_000, '06-15'),
     tx('kb-tantandaero', '아방가르드', 100_000, '07-05'),
   ];
   const snapshot = buildSnapshot(tantan, transactions, '2026-07');
@@ -66,8 +66,8 @@ describe('실적 미달 경고', () => {
   it('남은 금액을 본문에 담는다', () => {
     const alert = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 7 })
       .find((a) => a.type === '실적미달')!;
-    // 30만 구간까지 20만원 남음
-    expect(alert.body).toContain('200,000원');
+    // 7월에 10만원 사용 → 40만 구간까지 30만원 남음
+    expect(alert.body).toContain('300,000원');
   });
 
   it('무실적 카드는 실적 경고 대상이 아니다', () => {
@@ -87,8 +87,8 @@ describe('실적 구간 달성', () => {
     const alerts = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 20 });
     const reached = alerts.find((a) => a.type === '실적달성');
     expect(reached).toBeDefined();
-    expect(reached!.key).toContain('tier_reached_700000');
-    expect(reached!.title).toContain('70만원');
+    expect(reached!.key).toContain('tier_reached_800000');
+    expect(reached!.title).toContain('80만원');
   });
 
   it('실적 미달 구간(0원)은 달성이 아니다', () => {
@@ -117,33 +117,28 @@ describe('실적 구간 달성', () => {
 });
 
 describe('혜택 한도 소진', () => {
-  // 6월 70만 실적 → 7월 통합 한도 5만원.
-  const base = tx('kb-tantandaero', '아방가르드', 700_000, '06-15');
+  // 6월 40만 실적 → 7월 통합 한도 70,000원.
+  const base = tx('kb-tantandaero', '아방가르드', 400_000, '06-15');
 
   it('80% 미만이면 조용하다', () => {
     const snapshot = buildSnapshot(
       tantan,
-      [base, tx('kb-tantandaero', '스타벅스', 30_000, '07-05')],
+      [base, tx('kb-tantandaero', '헤어살롱', 100_000, '07-05')], // 20,000
       '2026-07',
     );
+    expect(snapshot.totalBenefitCap).toBe(70_000);
     const alerts = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 20 });
     expect(alerts.filter((a) => a.type === '한도소진임박')).toHaveLength(0);
   });
 
   it('80%를 넘으면 80% 알림만 난다 (아직 여유가 있으니 소진 알림은 이르다)', () => {
-    // 미용 20,000 + 백화점 10,000 + 마트 10,000 = 40,000 / 50,000 = 80%
+    // 미용 20% × 30만 = 60,000 / 70,000 ≈ 86%
     const snapshot = buildSnapshot(
       tantan,
-      [
-        base,
-        tx('kb-tantandaero', '헤어살롱', 200_000, '07-05'),
-        tx('kb-tantandaero', '롯데백화점', 200_000, '07-06'),
-        tx('kb-tantandaero', '이마트', 200_000, '07-07'),
-      ],
+      [base, tx('kb-tantandaero', '헤어살롱', 300_000, '07-05')],
       '2026-07',
     );
-    expect(snapshot.totalBenefitUsed).toBe(40_000);
-    expect(snapshot.totalBenefitCap).toBe(50_000);
+    expect(snapshot.totalBenefitUsed).toBe(60_000);
 
     const capAlerts = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 20 }).filter(
       (a) => a.type === '한도소진임박',
@@ -157,15 +152,12 @@ describe('혜택 한도 소진', () => {
       tantan,
       [
         base,
-        tx('kb-tantandaero', '헤어살롱', 200_000, '07-05'),
-        tx('kb-tantandaero', '롯데백화점', 200_000, '07-06'),
-        tx('kb-tantandaero', '이마트', 200_000, '07-07'),
-        // 통합 한도 잔여 10,000을 마저 채운다
-        tx('kb-tantandaero', '스크린골프', 200_000, '07-08'),
+        tx('kb-tantandaero', '헤어살롱', 300_000, '07-05'), // 60,000
+        tx('kb-tantandaero', '스크린골프', 200_000, '07-06'), // 잔여 10,000
       ],
       '2026-07',
     );
-    expect(snapshot.totalBenefitUsed).toBe(50_000);
+    expect(snapshot.totalBenefitUsed).toBe(70_000);
 
     const capAlerts = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 20 }).filter(
       (a) => a.type === '한도소진임박',
@@ -191,7 +183,7 @@ describe('혜택 한도 소진', () => {
 
 describe('혜택 적용 알림', () => {
   const transactions = [
-    tx('kb-tantandaero', '아방가르드', 700_000, '06-15'),
+    tx('kb-tantandaero', '아방가르드', 400_000, '06-15'),
     tx('kb-tantandaero', '스타벅스 강남점', 30_000, '07-05'),
   ];
   const snapshot = buildSnapshot(tantan, transactions, '2026-07');
@@ -203,7 +195,7 @@ describe('혜택 적용 알림', () => {
     expect(alert!.type).toBe('혜택적용');
     expect(alert!.title).toContain('3,000원');
     expect(alert!.body).toContain('스타벅스 강남점');
-    expect(alert!.body).toContain('커피 10%');
+    expect(alert!.body).toContain('커피·베이커리·아이스크림 10%');
   });
 
   it('혜택이 없는 거래에는 알림을 만들지 않는다', () => {

@@ -138,6 +138,17 @@ export function estimateBenefit(
     };
   }
 
+  // 실적 미달이면 그 사실을 먼저 말한다.
+  // 이 검사가 없으면 "통합 한도를 이미 다 썼습니다"로 나온다 — 한도 계산상
+  // 틀린 말은 아니지만, 사용자가 해야 할 일(실적 채우기)을 가린다.
+  if (card.performance.required && (snapshot.appliedTier?.threshold ?? 0) === 0) {
+    return {
+      ...base,
+      reason: '전월 실적 미달로 혜택이 적용되지 않습니다',
+      performanceNote,
+    };
+  }
+
   // 세금·상품권 같은 제외 항목에는 혜택이 붙지 않는다.
   // 이 검사를 빼먹으면 catch-all 룰(쿠팡와우 그 외 1.2%, ZERO 전 가맹점 1%)이
   // 지방세 결제에 달라붙어 "세금은 쿠팡와우로!"라고 권하게 된다.

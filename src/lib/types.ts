@@ -125,6 +125,11 @@ export interface TierCap {
 }
 
 export interface MerchantMatcher {
+  /**
+   * 결제 구분으로 매칭한다. 가맹점과 무관한 혜택에 쓴다.
+   * 예: Amex Blue의 해외 결제 5% 적립은 어느 가맹점이든 해외이기만 하면 된다.
+   */
+  paymentKinds?: PaymentKind[];
   /** 정규화된 브랜드 키 (config/merchants.ts) */
   brands?: string[];
   /** 브랜드 매칭 실패 시 쓰는 Notion 카테고리 폴백 */

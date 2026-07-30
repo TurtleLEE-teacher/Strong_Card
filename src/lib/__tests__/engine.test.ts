@@ -242,10 +242,12 @@ describe('실적 계산', () => {
   });
 
   it('구간을 실적 금액으로 판정한다', () => {
+    // 탄탄대로는 40만 / 80만 두 구간이다.
     expect(resolveTier(card, 0)?.threshold).toBe(0);
-    expect(resolveTier(card, 299_999)?.threshold).toBe(0);
-    expect(resolveTier(card, 300_000)?.threshold).toBe(300_000);
-    expect(resolveTier(card, 1_600_000)?.threshold).toBe(1_500_000);
+    expect(resolveTier(card, 399_999)?.threshold).toBe(0);
+    expect(resolveTier(card, 400_000)?.threshold).toBe(400_000);
+    expect(resolveTier(card, 799_999)?.threshold).toBe(400_000);
+    expect(resolveTier(card, 1_600_000)?.threshold).toBe(800_000);
   });
 });
 
@@ -283,30 +285,33 @@ describe('혜택 한도 계산', () => {
   });
 
   it('룰별 월 한도를 넘지 않는다', () => {
-    const tier = tantan.performance.tiers[1]; // 30만 구간, 커피 한도 5,000원
+    // Amex Blue 스타벅스 20% 할인은 월 5,000원 한도다.
+    const amex = CARDS_BY_ID['samsung-amex-blue'];
+    const tier = amex.performance.tiers[1]; // 30만 구간
     const result = computeBenefits({
-      card: tantan,
+      card: amex,
       transactions: [
-        tx({ title: '스타벅스', krwAmount: 40_000, approvedAt: '2026-07-01T01:00:00Z' }),
-        tx({ title: '스타벅스', krwAmount: 40_000, approvedAt: '2026-07-02T01:00:00Z' }),
+        tx({ title: '스타벅스', krwAmount: 20_000, approvedAt: '2026-07-01T01:00:00Z' }),
+        tx({ title: '스타벅스', krwAmount: 20_000, approvedAt: '2026-07-02T01:00:00Z' }),
       ],
       appliedTier: tier,
     });
     // 각 4,000원이지만 월 한도 5,000원에서 잘린다
     expect(result.totalUsed).toBe(5_000);
-    const coffee = result.usage.find((u) => u.ruleId === 'td-coffee');
+    const coffee = result.usage.find((u) => u.ruleId === 'ab-starbucks');
     expect(coffee?.used).toBe(5_000);
     expect(coffee?.cap).toBe(5_000);
   });
 
   it('한도는 이용 순서대로 소진된다', () => {
-    const tier = tantan.performance.tiers[1];
+    const amex = CARDS_BY_ID['samsung-amex-blue'];
+    const tier = amex.performance.tiers[1];
     const result = computeBenefits({
-      card: tantan,
+      card: amex,
       transactions: [
         // 일부러 역순으로 넣는다 — 엔진이 정렬해야 한다
-        tx({ title: '스타벅스', krwAmount: 30_000, approvedAt: '2026-07-05T01:00:00Z' }),
-        tx({ title: '스타벅스', krwAmount: 60_000, approvedAt: '2026-07-01T01:00:00Z' }),
+        tx({ title: '스타벅스', krwAmount: 15_000, approvedAt: '2026-07-05T01:00:00Z' }),
+        tx({ title: '스타벅스', krwAmount: 30_000, approvedAt: '2026-07-01T01:00:00Z' }),
       ],
       appliedTier: tier,
     });
@@ -325,16 +330,19 @@ describe('혜택 한도 계산', () => {
         tx({ title: '미용실', krwAmount: 200_000, approvedAt: '2026-07-01T01:00:00Z' }),
         tx({ title: '골프연습장', krwAmount: 200_000, approvedAt: '2026-07-02T01:00:00Z' }),
       ],
-      // 통합 한도 30,000원인 30만 구간
+      // 통합 한도 70,000원인 40만 구간
       appliedTier: tantan.performance.tiers[1],
     });
-    expect(result.totalUsed).toBeLessThanOrEqual(30_000);
+    // 미용 40,000 + 골프 40,000 = 80,000 → 통합 한도 70,000에서 잘린다
+    expect(result.totalUsed).toBe(70_000);
+    expect(result.appliedBenefits.at(-1)?.cappedBy).toBe('total');
   });
 
   it('건당 최소금액 미달이면 혜택이 없다', () => {
     const result = computeBenefits({
       card: tantan,
-      transactions: [tx({ title: '스타벅스', krwAmount: 3_000 })], // 최소 5,000원
+      // 탄탄대로 커피는 건당 2만원 이상이어야 한다
+      transactions: [tx({ title: '스타벅스', krwAmount: 15_000 })],
       appliedTier: tantan.performance.tiers[1],
     });
     expect(result.appliedBenefits).toHaveLength(0);
@@ -448,23 +456,23 @@ describe('월 스냅샷', () => {
 
   it('이번 달 혜택 한도는 지난달 실적으로 결정된다', () => {
     const transactions = [
-      // 6월에 70만원 사용 → 7월 적용 구간은 70만
-      tx({ cardId: card.id, title: '아방가르드', krwAmount: 700_000, approvedAt: '2026-06-15T01:00:00Z' }),
+      // 6월에 80만원 사용 → 7월 적용 구간은 80만 (통합 한도 10만원)
+      tx({ cardId: card.id, title: '아방가르드', krwAmount: 800_000, approvedAt: '2026-06-15T01:00:00Z' }),
       // 7월에는 아직 1만원만 사용
       tx({ cardId: card.id, title: '아방가르드', krwAmount: 10_000, approvedAt: '2026-07-05T01:00:00Z' }),
     ];
 
     const snap = buildSnapshot(card, transactions, '2026-07');
 
-    expect(snap.previousSpend).toBe(700_000);
-    expect(snap.appliedTier?.threshold).toBe(700_000);
-    expect(snap.totalBenefitCap).toBe(50_000);
+    expect(snap.previousSpend).toBe(800_000);
+    expect(snap.appliedTier?.threshold).toBe(800_000);
+    expect(snap.totalBenefitCap).toBe(100_000);
 
     // 이번 달 실적은 별개로 낮다
     expect(snap.currentSpend).toBe(10_000);
     expect(snap.reachedTier?.threshold).toBe(0);
-    expect(snap.nextTier?.threshold).toBe(300_000);
-    expect(snap.remainingToNextTier).toBe(290_000);
+    expect(snap.nextTier?.threshold).toBe(400_000);
+    expect(snap.remainingToNextTier).toBe(390_000);
   });
 
   it('카드사 공식 누계와의 오차를 계산한다', () => {

@@ -39,15 +39,15 @@ const AT = '2026-07-15T03:00:00Z';
 
 describe('카드별 예상 혜택', () => {
   it('실적을 채운 카드는 요율대로 혜택을 준다', () => {
-    // 6월 70만 → 7월 70만 구간 (커피 한도 10,000원)
-    const snapshot = buildSnapshot(tantan, [tx('kb-tantandaero', 'A', 700_000, '06-15')], '2026-07');
+    // 6월 40만 → 7월 40만 구간 (통합 한도 70,000원)
+    const snapshot = buildSnapshot(tantan, [tx('kb-tantandaero', 'A', 400_000, '06-15')], '2026-07');
     const result = estimateBenefit(tantan, snapshot, {
       merchant: '스타벅스 강남점',
       amount: 20_000,
       at: AT,
     });
     expect(result.expectedBenefit).toBe(2_000); // 10%
-    expect(result.ruleLabel).toBe('커피 10%');
+    expect(result.ruleLabel).toBe('커피·베이커리·아이스크림 10%');
     expect(result.cappedBy).toBe('none');
   });
 
@@ -65,22 +65,23 @@ describe('카드별 예상 혜택', () => {
   it('한도를 다 쓴 카드는 요율이 높아도 0원으로 계산한다', () => {
     // 이게 이 엔진의 존재 이유다. 요율만 보고 추천하면
     // 1원도 안 나오는 카드를 계속 권하게 된다.
+    const amex = CARDS_BY_ID['samsung-amex-blue'];
     const snapshot = buildSnapshot(
-      tantan,
+      amex,
       [
-        tx('kb-tantandaero', 'A', 700_000, '06-15'),
-        // 커피 한도 10,000원을 미리 소진
-        tx('kb-tantandaero', '스타벅스', 200_000, '07-01'),
+        tx('samsung-amex-blue', 'A', 400_000, '06-15'),
+        // 스타벅스 한도 5,000원을 미리 소진
+        tx('samsung-amex-blue', '스타벅스', 50_000, '07-01'),
       ],
       '2026-07',
     );
-    const result = estimateBenefit(tantan, snapshot, {
+    const result = estimateBenefit(amex, snapshot, {
       merchant: '스타벅스',
       amount: 50_000,
       at: AT,
     });
     expect(result.expectedBenefit).toBe(0);
-    expect(result.grossBenefit).toBe(5_000);
+    expect(result.grossBenefit).toBe(10_000);
     expect(result.reason).toContain('다 썼습니다');
   });
 
@@ -149,7 +150,7 @@ describe('카드별 예상 혜택', () => {
 
 describe('카드 추천 순위', () => {
   const transactions = [
-    tx('kb-tantandaero', 'A', 700_000, '06-15'), // 7월 70만 구간
+    tx('kb-tantandaero', 'A', 400_000, '06-15'), // 7월 40만 구간
     tx('samsung-amex-blue', 'B', 400_000, '06-15'), // 7월 30만 구간
   ];
   const snapshots = buildAllSnapshots(ACTIVE_CARDS, transactions, '2026-07');
@@ -241,10 +242,10 @@ describe('요율 표시', () => {
 
 describe('실적 영향 안내', () => {
   it('이 결제로 구간을 넘기면 알려준다', () => {
-    // 7월에 29만원 사용 → 30만 구간까지 1만원 남음
+    // 7월에 39만원 사용 → 40만 구간까지 1만원 남음
     const snapshot = buildSnapshot(
       tantan,
-      [tx('kb-tantandaero', 'A', 700_000, '06-15'), tx('kb-tantandaero', 'B', 290_000, '07-01')],
+      [tx('kb-tantandaero', 'A', 400_000, '06-15'), tx('kb-tantandaero', 'B', 390_000, '07-01')],
       '2026-07',
     );
     const result = estimateBenefit(tantan, snapshot, {
@@ -252,11 +253,11 @@ describe('실적 영향 안내', () => {
       amount: 20_000,
       at: AT,
     });
-    expect(result.performanceNote).toContain('30만원 구간 달성');
+    expect(result.performanceNote).toContain('40만원 구간 달성');
   });
 
   it('구간이 한참 멀면 조용하다', () => {
-    const snapshot = buildSnapshot(tantan, [tx('kb-tantandaero', 'A', 700_000, '06-15')], '2026-07');
+    const snapshot = buildSnapshot(tantan, [tx('kb-tantandaero', 'A', 400_000, '06-15')], '2026-07');
     const result = estimateBenefit(tantan, snapshot, {
       merchant: '이름없는동네가게',
       amount: 10_000,
@@ -279,7 +280,7 @@ describe('실적 영향 안내', () => {
 describe('놓친 혜택', () => {
   it('더 나은 카드가 있었다면 찾아낸다', () => {
     const transactions = [
-      tx('kb-tantandaero', 'A', 700_000, '06-15'),
+      tx('kb-tantandaero', 'A', 400_000, '06-15'),
       tx('samsung-amex-blue', 'B', 400_000, '06-15'),
       // 스타벅스를 탄탄대로(10%)로 결제 — Amex Blue였다면 20%
       tx('kb-tantandaero', '스타벅스 강남점', 30_000, '07-10'),
@@ -315,7 +316,7 @@ describe('놓친 혜택', () => {
 
   it('취소 건은 대상이 아니다', () => {
     const canceled = { ...tx('kb-tantandaero', '스타벅스', 100_000, '07-10'), canceled: true };
-    const transactions = [tx('kb-tantandaero', 'A', 700_000, '06-15'), canceled];
+    const transactions = [tx('kb-tantandaero', 'A', 400_000, '06-15'), canceled];
     const snapshots = buildAllSnapshots(ACTIVE_CARDS, transactions, '2026-07');
     const missed = findMissedBenefits(ACTIVE_CARDS, snapshots, transactions);
     expect(missed.find((m) => m.transactionId === canceled.id)).toBeUndefined();
@@ -323,7 +324,7 @@ describe('놓친 혜택', () => {
 
   it('놓친 금액이 큰 순으로 정렬한다', () => {
     const transactions = [
-      tx('kb-tantandaero', 'A', 700_000, '06-15'),
+      tx('kb-tantandaero', 'A', 400_000, '06-15'),
       tx('samsung-amex-blue', 'B', 400_000, '06-15'),
       tx('kb-tantandaero', '스타벅스 A', 30_000, '07-10'),
       tx('kb-tantandaero', 'NETFLIX', 50_000, '07-11'),
