@@ -203,12 +203,17 @@ export function buildAllSnapshots(
   cards: Card[],
   transactions: Transaction[],
   month: MonthKey,
-  /** 카드별 전월실적 수동 입력값 */
-  manualPreviousSpend: Partial<Record<Card['id'], number>> = {},
+  /**
+   * 그 달의 실적으로 알려진 값을 돌려주는 조회 함수.
+   *
+   * '전월실적'이 아니라 **'어느 달 실적'**을 받는다. 전월로 받으면 같은
+   * 값이 달이 바뀔 때마다 다른 달을 뜻하게 되어 조용히 틀려진다.
+   */
+  knownSpend?: (month: MonthKey, cardId: Card['id']) => number | undefined,
 ): CardMonthlySnapshot[] {
   return cards.map((card) =>
     buildSnapshot(card, transactions, month, {
-      manualPreviousSpend: manualPreviousSpend[card.id],
+      manualPreviousSpend: knownSpend?.(previousMonthKey(month), card.id),
     }),
   );
 }

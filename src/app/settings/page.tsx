@@ -3,6 +3,7 @@ import { ACTIVE_CARDS, CARDS_BY_ID } from '@/config/cards';
 import { PushSetup } from '@/components/PushSetup';
 import { getDashboardData } from '@/lib/data';
 import { dateTimeShort, won } from '@/lib/format';
+import { previousMonthKey } from '@/lib/date';
 import { WARNING_DAYS } from '@/lib/alerts/rules';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
@@ -43,7 +44,7 @@ function collectUnverified() {
 }
 
 export default async function SettingsPage() {
-  const { unmapped, snapshots, isDemo, error } = await getDashboardData();
+  const { unmapped, snapshots, month, isDemo, error } = await getDashboardData();
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null;
   const unverified = collectUnverified();
 
@@ -92,24 +93,28 @@ export default async function SettingsPage() {
             })}
         </ul>
         <p className="mt-3 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-          &#39;기록 없음&#39;은 실적이 <strong>0원이라는 뜻이 아니라</strong>{' '}Notion에 지난달
-          거래가 없어 계산할 수 없다는 뜻입니다. 카드사 앱에서 전월실적을 확인해 아래 환경변수에
-          넣으면 정확해집니다. Vercel &gt; Settings &gt; Environment Variables에서 저장하면 자동으로
-          재배포됩니다.
+          &#39;기록 없음&#39;은 실적이 <strong>0원이라는 뜻이 아니라</strong>{' '}Notion에 그 달
+          거래가 없어 계산할 수 없다는 뜻입니다. 거래가 쌓이면 자동으로 계산값으로 바뀝니다.
         </p>
-        {/* 긴 한 줄이라 가두지 않으면 패널 전체를 옆으로 밀어 우측이 잘린다.
-            줄바꿈을 허용해 좁은 화면에서도 다 보이게 한다. */}
+        <p className="mt-2 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          급하면 카드사 앱에서 본 금액을 <strong>월을 지정해</strong> 넣을 수 있습니다. Vercel
+          &gt; Settings &gt; Environment Variables에 저장하면 자동 재배포됩니다.
+        </p>
         <pre
           className="mt-2 max-w-full overflow-x-auto rounded-lg p-2.5 text-[10px] leading-relaxed break-all whitespace-pre-wrap"
           style={{ background: 'var(--surface-alt)', color: 'var(--text-secondary)' }}
         >
-          MANUAL_PREVIOUS_SPEND=&#123;{snapshots
+          MANUAL_MONTHLY_SPEND=&#123;&quot;{previousMonthKey(month)}&quot;:&#123;
+          {snapshots
             .filter((s) => CARDS_BY_ID[s.cardId].performance.required)
             .map((s) => `"${s.cardId}":0`)
-            .join(',')}&#125;
+            .join(',')}
+          &#125;&#125;
         </pre>
-        <p className="mt-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          지난달 거래가 Notion에 온전히 쌓이면 이 값은 지워도 됩니다 — 계산값이 더 정확합니다.
+        <p className="mt-2 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          <strong>월을 못 박는 이유:</strong> &#39;전월실적&#39;으로 넣으면 같은 값이 달이 바뀔
+          때마다 다른 달을 뜻하게 되어 조용히 틀려집니다. 월을 적어 두면 그 달 화면에서만
+          쓰이고, 다음 달은 알아서 다음 값을 찾습니다.
         </p>
       </Panel>
 
