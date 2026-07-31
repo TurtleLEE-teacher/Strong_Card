@@ -192,6 +192,16 @@ export const BRAND_ALIASES: Record<string, string[]> = {
   YES24: ['YES24', '예스24'],
   KYOBO: ['교보문고', '교보'],
   ALADIN: ['알라딘'],
+
+  // ── 탄탄대로 약관에 열거된 가맹점 ────────────────────────────────────
+  // 약관이 "SPA패션: ZARA, H&M, 유니클로"처럼 **열거식**이라 그대로 넣는다.
+  ZARA: ['ZARA', '자라'],
+  H_AND_M: ['H&M', 'HM', '에이치앤엠'],
+  UNIQLO: ['UNIQLO', '유니클로'],
+  DABANCHAN: ['더반찬'],
+  IKEA: ['IKEA', '이케아'],
+  MUJI: ['MUJI', '무인양품'],
+  CASAMIA: ['까사미아', 'CASAMIA'],
 };
 
 /**
@@ -238,6 +248,22 @@ export const BRAND_GROUPS = {
   ],
   LIVING: ['DAISO', 'OLIVEYOUNG'],
   FRESH_DELIVERY: ['KURLY', 'OASIS'],
+
+  /*
+   * ── 탄탄대로 전용 묶음 ────────────────────────────────────────────
+   * 약관이 가맹점을 **열거**한다. 일반 묶음(CONVENIENCE 5곳, MART 5곳)을
+   * 그대로 쓰면 대상이 아닌 곳까지 할인이 붙어 과다 계상된다.
+   *   편의점  GS25, CU만            (세븐일레븐·이마트24·미니스톱 제외)
+   *   대형마트 이마트·롯데마트·홈플러스만 (코스트코·하나로마트 제외, SSM 제외)
+   *   주유    SK·GS칼텍스만          (S-OIL·현대오일뱅크 제외)
+   */
+  TT_CVS: ['GS25', 'CU'],
+  TT_DEPT: ['SHINSEGAE_DEPT', 'LOTTE_DEPT', 'HYUNDAI_DEPT'],
+  TT_MART: ['EMART', 'LOTTE_MART', 'HOMEPLUS'],
+  TT_FUEL: ['SK_ENERGY', 'GS_CALTEX'],
+  TT_SPA: ['ZARA', 'H_AND_M', 'UNIQLO'],
+  TT_FOOD_DELIVERY: ['BAEMIN', 'DABANCHAN', 'KURLY'],
+  TT_INTERIOR: ['IKEA', 'MUJI', 'CASAMIA'],
   UTILITY: ['KEPCO_BILL', 'CITY_GAS', 'WATER_BILL', 'APT_FEE'],
   /** 신한 Discount Plan Time Plan 카페 영역 (지정 6개 브랜드만) */
   DP_CAFE: [

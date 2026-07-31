@@ -77,14 +77,34 @@ function matchesExclusion(
  * 한 달치 거래에서 실적을 집계한다.
  * `transactions`는 **이미 해당 월·해당 카드로 필터링돼 있어야 한다.**
  */
-export function computePerformance(card: Card, transactions: Transaction[]): PerformanceResult {
+export interface PerformanceOptions {
+  /**
+   * 판정과 무관하게 실적에서 뺄 거래 id.
+   * 탄탄대로처럼 "이 혜택을 받은 건은 실적에서 뺀다"는 약관을 반영할 때 쓴다.
+   * 혜택 계산이 끝나야 알 수 있는 값이라 2패스로 돌린다.
+   */
+  forceExclude?: ReadonlySet<string>;
+  /** forceExclude에 붙일 사유 */
+  forceExcludeVerdict?: PerformanceVerdict;
+}
+
+export function computePerformance(
+  card: Card,
+  transactions: Transaction[],
+  options: PerformanceOptions = {},
+): PerformanceResult {
   let includedSpend = 0;
   let excludedSpend = 0;
   const verdicts = new Map<string, PerformanceVerdict>();
   const buckets = new Map<PerformanceVerdict, { amount: number; count: number }>();
 
   for (const tx of transactions) {
-    const verdict = judgeTransaction(card, tx);
+    // 강제 제외가 먼저다. 가맹점 판정으로는 '인정'인데 혜택을 받았다는
+    // 이유로 빠지는 건이라 일반 제외 규칙으로는 표현할 수 없다.
+    const verdict =
+      options.forceExclude?.has(tx.id)
+        ? (options.forceExcludeVerdict ?? '제외-기타')
+        : judgeTransaction(card, tx);
     verdicts.set(tx.id, verdict);
 
     if (verdict === '인정') {

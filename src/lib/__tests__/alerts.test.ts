@@ -138,7 +138,7 @@ describe('혜택 한도 소진', () => {
       tantan,
       [
         tx('kb-tantandaero', '아방가르드', 900_000, '06-15'), // 80만 구간
-        // 스포츠·미용·결혼 영역 한도 20,000원을 채운다
+        // 미용·스포츠·결혼 영역 한도 20,000원을 채운다
         tx('kb-tantandaero', '헤어살롱', 200_000, '07-05'),
       ],
       '2026-07',
@@ -149,12 +149,12 @@ describe('혜택 한도 소진', () => {
     );
     expect(capAlerts).toHaveLength(2);
     expect(capAlerts.map((a) => a.key)).toEqual([
-      expect.stringContaining('cap_tt-sports-beauty-wedding_80'),
-      expect.stringContaining('cap_tt-sports-beauty-wedding_100'),
+      expect.stringContaining('cap_tt-trendy-beauty_80'),
+      expect.stringContaining('cap_tt-trendy-beauty_100'),
     ]);
     expect(capAlerts[1].title).toContain('한도 소진');
     // 어느 영역인지 제목에 들어가야 한다
-    expect(capAlerts[1].title).toContain('스포츠·미용·결혼');
+    expect(capAlerts[1].title).toContain('미용·스포츠·결혼');
   });
 
   it('영역마다 알림 키가 달라 서로를 막지 않는다', () => {
@@ -171,8 +171,8 @@ describe('혜택 한도 소진', () => {
       .filter((a) => a.type === '한도소진임박')
       .map((a) => a.key);
     expect(new Set(keys).size).toBe(keys.length);
-    expect(keys.some((k) => k.includes('tt-sports-beauty-wedding'))).toBe(true);
-    expect(keys.some((k) => k.includes('tt-dept-cvs'))).toBe(true);
+    expect(keys.some((k) => k.includes('tt-trendy-beauty'))).toBe(true);
+    expect(keys.some((k) => k.includes("tt-daily-dept-cvs"))).toBe(true);
   });
 
   it('한도가 없는 카드는 소진 알림 대상이 아니다', () => {
