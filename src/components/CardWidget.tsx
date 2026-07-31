@@ -86,9 +86,13 @@ function Header({
   seriesColor: string;
 }) {
   const sourceMonth = monthShort(previousMonthKey(snapshot.month));
-  const basis = card.performance.required
-    ? `${sourceMonth} 실적 ${snapshot.appliedTier?.label ?? '미달'} 기준`
-    : '실적 조건 없음';
+  const basis = !card.performance.required
+    ? '실적 조건 없음'
+    : snapshot.previousSpendSource === 'unknown'
+      ? `${sourceMonth} 거래 기록 없음 — 실적 확인 필요`
+      : `${sourceMonth} 실적 ${snapshot.appliedTier?.label ?? '미달'} 기준${
+          snapshot.previousSpendSource === 'manual' ? ' (직접 입력)' : ''
+        }`;
 
   return (
     <header>
@@ -162,9 +166,11 @@ function Chip({
 function TierBadge({ snapshot }: { snapshot: CardMonthlySnapshot }) {
   const tier = snapshot.appliedTier;
   const missed = !tier || tier.threshold === 0;
+  // 지난달 거래가 없으면 '미달'이 아니라 '모름'이다. 단정하면 거짓말이 된다.
+  const unknown = snapshot.previousSpendSource === 'unknown';
   return (
-    <Chip tone={missed ? 'critical' : 'neutral'}>
-      {missed ? '실적 미달' : `${tier.label} 구간`}
+    <Chip tone={missed && !unknown ? 'critical' : 'neutral'}>
+      {unknown ? '실적 확인 필요' : missed ? '실적 미달' : `${tier!.label} 구간`}
     </Chip>
   );
 }
@@ -326,7 +332,12 @@ function BenefitSection({
             라벨/수치를 윗줄에, 바를 아랫줄에 두면 폭에 관계없이 온전히 보인다. */}
         <ul className="space-y-2.5">
           {activeUsage.map((usage) => (
-            <UsageRow key={usage.ruleId} usage={usage} seriesColor={seriesColor} />
+            <UsageRow
+              key={usage.ruleId}
+              usage={usage}
+              seriesColor={seriesColor}
+              tierUnknown={snapshot.previousSpendSource === 'unknown'}
+            />
           ))}
         </ul>
 

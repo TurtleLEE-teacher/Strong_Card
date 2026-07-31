@@ -174,26 +174,29 @@ export function estimateBenefit(
 
   const performanceNote = describePerformanceImpact(card, snapshot, query.amount);
 
+  // 구간이 0인 이유가 '미달'인지 '몰라서'인지 구분한다.
+  // 지난달 거래가 없으면 실적을 계산할 수 없을 뿐, 실제 카드는 혜택을
+  // 주고 있을 수 있다. '미달'이라고 단정하면 멀쩡한 카드를 쓰지 말라고
+  // 권하게 된다.
+  const tierUnknown = snapshot.previousSpendSource === 'unknown';
+  const noTier = card.performance.required && (snapshot.appliedTier?.threshold ?? 0) === 0;
+  const noTierReason = tierUnknown
+    ? '지난달 거래 기록이 없어 전월실적을 알 수 없습니다 (설정에서 직접 입력)'
+    : '전월 실적 미달로 혜택이 적용되지 않습니다';
+
   if (!rule) {
     return {
       ...base,
-      reason:
-        card.performance.required && (snapshot.appliedTier?.threshold ?? 0) === 0
-          ? '전월 실적 미달로 혜택이 적용되지 않습니다'
-          : '이 가맹점에 적용되는 혜택이 없습니다',
+      reason: noTier ? noTierReason : '이 가맹점에 적용되는 혜택이 없습니다',
       performanceNote,
     };
   }
 
-  // 실적 미달이면 그 사실을 먼저 말한다.
+  // 구간이 없으면 그 사실을 먼저 말한다.
   // 이 검사가 없으면 "통합 한도를 이미 다 썼습니다"로 나온다 — 한도 계산상
-  // 틀린 말은 아니지만, 사용자가 해야 할 일(실적 채우기)을 가린다.
-  if (card.performance.required && (snapshot.appliedTier?.threshold ?? 0) === 0) {
-    return {
-      ...base,
-      reason: '전월 실적 미달로 혜택이 적용되지 않습니다',
-      performanceNote,
-    };
+  // 틀린 말은 아니지만, 사용자가 해야 할 일(실적 채우기 / 실적 입력)을 가린다.
+  if (noTier) {
+    return { ...base, reason: noTierReason, performanceNote };
   }
 
   // 세금·상품권 같은 제외 항목에는 혜택이 붙지 않는다.

@@ -17,6 +17,11 @@ export default async function DashboardPage() {
   // 혜택이 분자에는 들어가 있으므로 분모도 같은 기준이어야 한다.
   const totalSpend = snapshots.reduce((sum, s) => sum + s.currentSpend + s.excludedSpend, 0);
 
+  // 지난달 거래가 없어 전월실적을 모르는 카드
+  const tierUnknownCards = snapshots.filter(
+    (s) => CARDS_BY_ID[s.cardId].performance.required && s.previousSpendSource === 'unknown',
+  );
+
   // 실적이 모자란 채로 월말이 가까운 카드 — 대시보드 상단에서 먼저 알린다
   const atRisk = snapshots.filter((s) => {
     const card = CARDS_BY_ID[s.cardId];
@@ -81,6 +86,21 @@ export default async function DashboardPage() {
           ) : (
             <> — .env.local에 NOTION_API_KEY를 설정하면 실제 거래로 바뀝니다.</>
           )}
+        </Notice>
+      )}
+
+      {/*
+        지난달 거래가 없는 카드 — 실적을 '모르는' 상태다. 이걸 알리지 않으면
+        모든 카드가 '실적 미달'로 보이면서 혜택이 0원으로 나오고, 사용자는
+        앱이 고장 났다고 생각하게 된다.
+      */}
+      {tierUnknownCards.length > 0 && (
+        <Notice tone="warning">
+          <strong>{tierUnknownCards.length}장</strong>의 카드에 지난달 거래 기록이 없어 전월실적을
+          알 수 없습니다. 혜택 한도가 0원으로 보이는 건 실적이 모자라서가 아니라 데이터가 없어서
+          입니다. 카드사 앱의 전월실적을 <code>MANUAL_PREVIOUS_SPEND</code> 환경변수에 넣으면
+          정확해집니다 — <Link href="/settings" className="underline">설정</Link>에서 방법을 볼 수
+          있습니다.
         </Notice>
       )}
 

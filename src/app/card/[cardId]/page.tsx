@@ -111,8 +111,19 @@ export default async function CardDetailPage({
         <div className="grid grid-cols-2 gap-4">
           <Stat
             label={`${monthShort(previousMonthKey(month))} 실적 (이번 달 혜택을 결정함)`}
-            value={won(snapshot.previousSpend)}
-            note={snapshot.appliedTier ? `${snapshot.appliedTier.label} 구간 적용 중` : '실적 미달'}
+            value={
+              snapshot.previousSpendSource === 'unknown' ? '기록 없음' : won(snapshot.previousSpend)
+            }
+            note={
+              // 지난달 거래가 없으면 '미달'이 아니라 '모름'이다.
+              snapshot.previousSpendSource === 'unknown'
+                ? '거래 기록이 없어 구간을 알 수 없음'
+                : snapshot.appliedTier
+                  ? `${snapshot.appliedTier.label} 구간 적용 중${
+                      snapshot.previousSpendSource === 'manual' ? ' (직접 입력)' : ''
+                    }`
+                  : '실적 미달'
+            }
           />
           <Stat
             label={`${monthShort(month)} 실적 (다음 달 혜택을 결정함)`}
@@ -200,6 +211,7 @@ export default async function CardDetailPage({
                 usage={usage}
                 seriesColor={seriesColor}
                 showCount
+                tierUnknown={snapshot.previousSpendSource === 'unknown'}
                 contributions={contributionsFor(usage)}
               />
             ))}

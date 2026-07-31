@@ -48,12 +48,15 @@ export function UsageRow({
   usage,
   seriesColor,
   showCount = false,
+  tierUnknown = false,
   contributions,
 }: {
   usage: BenefitUsage;
   seriesColor: string;
   /** 적용 건수를 라벨 옆에 붙인다. 상세 화면에서만 쓴다. */
   showCount?: boolean;
+  /** 전월실적을 모르는 상태. '미달'이라고 단정하지 않는다. */
+  tierUnknown?: boolean;
   /**
    * 이 영역의 혜택을 만든 거래들. 주면 줄이 펼침 가능해진다.
    * 대시보드는 주지 않고, 상세 화면만 준다.
@@ -85,7 +88,7 @@ export function UsageRow({
                 color: 'var(--text-muted)',
               }}
             >
-              실적 미달
+              {tierUnknown ? '확인 필요' : '실적 미달'}
             </span>
           )}
           {isFull && (
@@ -103,7 +106,9 @@ export function UsageRow({
               아예 없으면 화면의 다른 금액과 표기가 갈린다. */}
           <span className="text-[11px] tabular" style={{ color: 'var(--text-muted)' }}>
             {locked
-              ? `${wonShort(usage.unlock!.threshold)} 채우면 ${won(usage.unlock!.cap)}`
+              ? tierUnknown
+                ? `${wonShort(usage.unlock!.threshold)} 이상이면 ${won(usage.unlock!.cap)}`
+                : `${wonShort(usage.unlock!.threshold)} 채우면 ${won(usage.unlock!.cap)}`
               : usage.cap === null
                 ? won(usage.used)
                 : `${usage.used.toLocaleString('ko-KR')} / ${won(usage.cap)}`}

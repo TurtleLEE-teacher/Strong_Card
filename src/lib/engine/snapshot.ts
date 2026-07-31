@@ -113,10 +113,19 @@ function adjustedPerformance(
   };
 }
 
+export interface SnapshotOptions {
+  /**
+   * 전월실적 수동 입력값. Notion에 지난달 거래가 없을 때 쓴다.
+   * 있으면 계산값보다 우선한다 — 넣었다는 건 계산값을 믿지 못하겠다는 뜻이다.
+   */
+  manualPreviousSpend?: number;
+}
+
 export function buildSnapshot(
   card: Card,
   allTransactions: Transaction[],
   month: MonthKey,
+  options: SnapshotOptions = {},
 ): CardMonthlySnapshot {
   const prevMonth = previousMonthKey(month);
   const current = filterTransactions(allTransactions, card.id, month);
@@ -129,7 +138,20 @@ export function buildSnapshot(
   const prevPrev = filterTransactions(allTransactions, card.id, previousMonthKey(prevMonth));
   const prevAppliedTier = resolveTier(card, computePerformance(card, prevPrev).includedSpend);
   const prevPerf = adjustedPerformance(card, previous, prevAppliedTier, prevMonth).result;
-  const appliedTier = resolveTier(card, prevPerf.includedSpend);
+
+  /*
+   * 전월실적을 어디서 얻었는가.
+   *
+   * 지난달 거래가 **하나도 없으면** 실적이 0원인 게 아니라 모르는 것이다.
+   * 앱을 막 도입한 시점이 정확히 이 상태다 — Notion에 지난달 데이터가
+   * 없을 뿐, 카드는 멀쩡히 혜택을 주고 있다. 둘을 같은 걸로 취급하면
+   * 모든 카드가 '실적 미달'로 뜨면서 화면이 거짓말을 한다.
+   */
+  const manual = options.manualPreviousSpend;
+  const previousSpendSource: CardMonthlySnapshot['previousSpendSource'] =
+    manual !== undefined ? 'manual' : previous.length > 0 ? 'computed' : 'unknown';
+  const previousSpend = manual ?? prevPerf.includedSpend;
+  const appliedTier = resolveTier(card, previousSpend);
 
   // --- 이번 달 실적 (다음 달 구간을 결정) ---
   const { result: perf, baseVerdicts } = adjustedPerformance(card, current, appliedTier, month);
@@ -162,7 +184,8 @@ export function buildSnapshot(
     reconciliationDelta:
       issuerReportedSpend === null ? null : perf.includedSpend - issuerReportedSpend,
 
-    previousSpend: prevPerf.includedSpend,
+    previousSpend,
+    previousSpendSource,
     appliedTier,
     benefitUsage: benefits.usage,
     appliedBenefits: benefits.appliedBenefits,
@@ -180,8 +203,14 @@ export function buildAllSnapshots(
   cards: Card[],
   transactions: Transaction[],
   month: MonthKey,
+  /** 카드별 전월실적 수동 입력값 */
+  manualPreviousSpend: Partial<Record<Card['id'], number>> = {},
 ): CardMonthlySnapshot[] {
-  return cards.map((card) => buildSnapshot(card, transactions, month));
+  return cards.map((card) =>
+    buildSnapshot(card, transactions, month, {
+      manualPreviousSpend: manualPreviousSpend[card.id],
+    }),
+  );
 }
 
 /** 카드에 매핑되지 않은 거래 (뒷4자리 파싱 실패 등) */
