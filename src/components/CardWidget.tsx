@@ -4,6 +4,7 @@ import { Meter, type MeterTick } from './Meter';
 import { UsageRow } from './UsageRow';
 import { CardFace } from './CardFace';
 import { issuerLabel } from '@/config/issuers';
+import { guidesFor } from '@/lib/rule-guide';
 import { performanceSeverity } from '@/lib/severity';
 import { monthShort, won, wonShort } from '@/lib/format';
 import { previousMonthKey } from '@/lib/date';
@@ -337,6 +338,7 @@ function BenefitSection({
               usage={usage}
               seriesColor={seriesColor}
               tierUnknown={snapshot.previousSpendSource === 'unknown'}
+              guides={guidesFor(card, usage, snapshot.ruleCounts)}
             />
           ))}
         </ul>

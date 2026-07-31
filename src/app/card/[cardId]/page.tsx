@@ -7,6 +7,7 @@ import { Meter } from '@/components/Meter';
 import { UsageRow, type UsageContribution } from '@/components/UsageRow';
 import { CardFace } from '@/components/CardFace';
 import { issuerLabel } from '@/config/issuers';
+import { guidesFor } from '@/lib/rule-guide';
 import { performanceSeverity } from '@/lib/severity';
 import { dateTimeShort, monthLabel, monthShort, won, wonShort } from '@/lib/format';
 import { previousMonthKey } from '@/lib/date';
@@ -212,6 +213,7 @@ export default async function CardDetailPage({
                 seriesColor={seriesColor}
                 showCount
                 tierUnknown={snapshot.previousSpendSource === 'unknown'}
+                guides={guidesFor(card, usage, snapshot.ruleCounts)}
                 contributions={contributionsFor(usage)}
               />
             ))}
