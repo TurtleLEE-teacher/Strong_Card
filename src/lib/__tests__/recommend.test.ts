@@ -52,7 +52,9 @@ describe('카드별 예상 혜택', () => {
   });
 
   it('실적 미달 카드는 0원이라고 정확히 말한다', () => {
-    const snapshot = buildSnapshot(tantan, [], '2026-07');
+    // 지난달 거래가 **있는데** 구간에 못 미친 경우가 진짜 '미달'이다.
+    const snapshot = buildSnapshot(tantan, [tx('kb-tantandaero', '아무데나', 100_000, '06-10')], '2026-07');
+    expect(snapshot.previousSpendSource).toBe('computed');
     const result = estimateBenefit(tantan, snapshot, {
       merchant: '스타벅스',
       amount: 20_000,
@@ -60,6 +62,20 @@ describe('카드별 예상 혜택', () => {
     });
     expect(result.expectedBenefit).toBe(0);
     expect(result.reason).toContain('실적 미달');
+  });
+
+  it('지난달 기록이 없으면 미달이 아니라 "알 수 없음"이라고 말한다', () => {
+    // 거래가 없는 건 실적이 0원이라는 뜻이 아니라 계산할 수 없다는 뜻이다.
+    // '미달'이라고 단정하면 멀쩡히 혜택을 주는 카드를 쓰지 말라고 권하게 된다.
+    const snapshot = buildSnapshot(tantan, [], '2026-07');
+    expect(snapshot.previousSpendSource).toBe('unknown');
+    const result = estimateBenefit(tantan, snapshot, {
+      merchant: '스타벅스',
+      amount: 20_000,
+      at: AT,
+    });
+    expect(result.reason).toContain('알 수 없습니다');
+    expect(result.reason).not.toContain('미달');
   });
 
   it('한도를 다 쓴 카드는 요율이 높아도 0원으로 계산한다', () => {

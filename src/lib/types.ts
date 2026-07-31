@@ -342,6 +342,15 @@ export interface CardMonthlySnapshot {
   // --- 이번 달 혜택 (← 지난달 실적으로 확정) ---
   /** 지난달 실적 */
   previousSpend: number;
+  /**
+   * 전월실적을 어디서 얻었는지.
+   *
+   * 'computed' — 지난달 거래로 계산했다
+   * 'manual'   — 사용자가 카드 앱을 보고 직접 넣었다
+   * 'unknown'  — **지난달 거래가 하나도 없다.** 실적이 0인 것이 아니라
+   *              모르는 것이다. 둘을 섞으면 "실적 미달"이라고 거짓말하게 된다.
+   */
+  previousSpendSource: 'computed' | 'manual' | 'unknown';
   /** 지난달 실적으로 확정된, 이번 달 적용 구간 */
   appliedTier: SpendTier | null;
   benefitUsage: BenefitUsage[];
