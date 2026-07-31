@@ -116,6 +116,17 @@ export interface PerformancePolicy {
    * 추정 구간은 설정 화면에 '확인 필요'로 노출된다.
    */
   tierConfidence?: RuleConfidence;
+  /**
+   * **이 혜택을 받은 거래는 실적에서 통째로 빠진다.** capGroup 또는 룰 id.
+   *
+   * 탄탄대로 약관: "이용실적 제외 대상 — 탄탄대로 카드로 'Trendy서비스'
+   * 받은 이용건(해당 매출 전체)". 20% 할인을 받으면 그 결제 금액 전액이
+   * 실적에 안 잡힌다. 40만/80만 구간을 넘기느냐가 걸린 문제라 반드시
+   * 반영해야 한다 — 안 하면 실적을 실제보다 크게 계산한다.
+   *
+   * 할인은 그대로 받는다. 빠지는 건 실적뿐이다.
+   */
+  excludeBenefitedGroups?: string[];
 }
 
 /** 구간별로 달라지는 한도. threshold는 SpendTier.threshold와 맞춘다. */

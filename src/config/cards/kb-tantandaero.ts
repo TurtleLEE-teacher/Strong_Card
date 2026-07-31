@@ -6,36 +6,64 @@ import { COMMON_EXCLUSIONS } from '../exclusions';
  * KB국민 탄탄대로 Miz&Mr 티타늄카드
  *
  * **통합 한도가 아니라 영역별 한도 6개**로 굴러간다.
- * 마케팅 문구의 "월 최대 10만원"은 2구간 영역 한도의 합계다.
+ * 마케팅의 "월 최대 10만원"은 2구간 영역 한도의 합계다.
  *
- *   스포츠·미용·결혼           20%   20,000원
- *   식품배송·SPA패션·인테리어  20%   20,000원
- *   백화점·편의점             10%   15,000원
- *   커피·베이커리·아이스크림   10%   15,000원  (건당 2만원 이상)
- *   대중교통                 10%   15,000원
- *   대형마트·약국              5%   15,000원
- *                                 ─────────
- *                                 100,000원  (2구간 기준)
+ *   Trendy 서비스                      40만    80만
+ *   ─────────────────────────────────────────────
+ *   미용·화장품 / 스포츠·골프 / 결혼·가전  20%   15,000  20,000
+ *   SPA패션 / 식품배송 / 인테리어         20%   15,000  20,000
  *
- * 출처: 카드 앱 '이번 달 혜택' 화면(사용자 제공) — 2구간 한도 실측.
- *       KB국민카드 상품 안내 — 구간 임계값(40만/80만).
+ *   Daily 서비스
+ *   ─────────────────────────────────────────────
+ *   커피·베이커리·아이스크림 (건당 2만↑)  10%   10,000  15,000
+ *   대중교통·택시 10% + 주유 100원/ℓ           10,000  15,000
+ *   백화점 / 편의점                      10%   10,000  15,000
+ *   대형마트 / 약국                       5%   10,000  15,000
+ *                                        ───────────────────
+ *                                            70,000 100,000
+ *
+ * ⚠️ 실적 함정 — **Trendy 서비스 할인을 받은 거래는 실적에서 통째로 빠진다.**
+ *    약관 "이용실적 제외 대상: 'Trendy서비스' 받은 이용건(해당 매출 전체)".
+ *    20% 할인 12만원짜리 결제 한 건이 실적 12만원을 통째로 날린다.
+ *    40만/80만 구간이 걸린 문제라 performance.excludeBenefitedGroups로
+ *    반영한다. 할인은 그대로 받고, 빠지는 건 실적뿐이다.
+ *
+ * 대상 가맹점이 **열거식**이다. 일반 브랜드 묶음을 쓰면 과다 계상된다.
+ *   편의점   GS25, CU만            (세븐일레븐·이마트24 제외)
+ *   백화점   신세계·롯데·현대만
+ *   대형마트 이마트·롯데마트·홈플러스만 (SSM·코스트코 제외)
+ *   주유     SK·GS칼텍스만
+ *   SPA패션  ZARA·H&M·유니클로만
+ *   식품배송 배달의민족·더반찬·마켓컬리만
+ *   인테리어 IKEA·MUJI·까사미아만
+ *
+ * 출처: KB국민카드 공식 상품 안내 전문 (사용자 제공)
  */
 
+/** Trendy 서비스 공통 한도 */
+const TRENDY_CAP: TierCap[] = [
+  { threshold: 0, cap: 0 },
+  { threshold: 400_000, cap: 15_000 },
+  { threshold: 800_000, cap: 20_000 },
+];
+
+/** Daily 서비스 공통 한도 */
+const DAILY_CAP: TierCap[] = [
+  { threshold: 0, cap: 0 },
+  { threshold: 400_000, cap: 10_000 },
+  { threshold: 800_000, cap: 15_000 },
+];
+
+/** 대중교통·택시와 주유가 한 한도를 나눠 쓴다 */
+const TRANSIT_GROUP = 'tt-daily-transit';
+
 /**
- * 영역별 한도.
- *
- * 2구간(80만) 값은 카드 앱 화면에서 직접 읽었다.
- * ⚠️ **1구간(40만) 배분은 추정이다.** 합계가 7만원이라는 것만 확인됐고
- *    영역별로 어떻게 쪼개지는지는 화면에 없었다. 40만~80만 구간에서
- *    실제 잔여한도를 보면 바로 확정된다.
+ * 주유 할인은 **리터당 100원**이라 결제금액 비율로 표현할 수 없다.
+ * 리터 수를 알 방법이 없으므로 기준유가를 가정해 환산한다.
+ * 유가가 움직이면 이 값도 움직인다 — 그래서 'estimated'로 표시한다.
  */
-function areaCap(tier1: number, tier2: number): TierCap[] {
-  return [
-    { threshold: 0, cap: 0 },
-    { threshold: 400_000, cap: tier1 },
-    { threshold: 800_000, cap: tier2 },
-  ];
-}
+const ASSUMED_FUEL_PRICE_PER_L = 1_700;
+const FUEL_RATE = 100 / ASSUMED_FUEL_PRICE_PER_L; // ≈ 5.9%
 
 export const KB_TANTANDAERO: Card = {
   id: 'kb-tantandaero',
@@ -53,9 +81,9 @@ export const KB_TANTANDAERO: Card = {
     required: true,
     countsForeignSpend: true,
     installmentPolicy: 'full',
-    // 구간 임계값(40만/80만)과 2구간 영역 한도는 확인됐지만
-    // 1구간 영역 배분은 추정이다.
-    tierConfidence: 'estimated',
+    tierConfidence: 'confirmed',
+    // Trendy 할인을 받은 거래는 실적에서 통째로 빠진다 (약관 명시).
+    excludeBenefitedGroups: ['tt-trendy-beauty', 'tt-trendy-spa'],
     tiers: [
       // 통합 한도를 두지 않는다 — 이 카드는 영역별 한도로만 제어된다.
       { threshold: 0, label: '실적 미달', totalBenefitCap: null },
@@ -66,104 +94,120 @@ export const KB_TANTANDAERO: Card = {
   },
 
   benefits: [
-    // ── 20% 영역 ──────────────────────────────────────────────────────
+    // ── Trendy 서비스 20% (영역별 15,000 / 20,000) ─────────────────────
+    // 이 두 영역의 할인을 받은 거래는 실적에서 빠진다.
     {
-      id: 'tt-sports-beauty-wedding',
-      label: '스포츠·미용·결혼 20%',
+      id: 'tt-trendy-beauty',
+      label: '미용·스포츠·결혼 20%',
       type: 'discount',
       rate: 0.2,
       match: {
-        brands: ['OLIVEYOUNG'],
         keywords: [
-          // 미용·화장품
-          '미용실', '헤어', '네일', '피부과', '피부관리', '에스테틱', '왁싱', '화장품',
-          // 스포츠·골프
-          '골프', 'GOLF', '스크린골프', '컨트리클럽', '스포츠센터', '헬스', '피트니스',
-          // 결혼서비스·가전
-          '웨딩', '결혼', '예식장', '하이마트', '전자랜드', '삼성디지털프라자', 'LG베스트샵',
+          // 미용/화장품: 미용원, 피부미용원, 화장품점
+          '미용실', '미용원', '헤어', '네일', '피부관리', '에스테틱', '왁싱', '화장품',
+          // 스포츠/골프: 종합스포츠센터, 스포츠용품점, 골프장, 골프연습장
+          '골프', 'GOLF', '컨트리클럽', '스포츠센터', '스포츠용품',
+          // 결혼서비스/가전: 결혼식장, 결혼식서비스업, 가전제품점
+          '웨딩', '결혼', '예식장', '하이마트', '전자랜드', '디지털프라자', '베스트샵',
         ],
       },
-      capPerMonth: areaCap(15_000, 20_000),
+      capPerMonth: TRENDY_CAP,
       priority: 10,
       confidence: 'confirmed',
+      notes: '이 할인을 받은 거래는 실적에서 제외된다',
     },
     {
-      id: 'tt-delivery-fashion-interior',
-      label: '식품배송·SPA패션·인테리어 20%',
+      id: 'tt-trendy-spa',
+      label: 'SPA패션·식품배송·인테리어 20%',
       type: 'discount',
       rate: 0.2,
       match: {
-        brands: [...BRAND_GROUPS.FRESH_DELIVERY, 'BAEMIN'],
-        keywords: [
-          // 식품배송
-          '배민찬', '헬로네이처',
-          // SPA패션
-          'ZARA', '자라', 'H&M', '유니클로', 'UNIQLO', 'SPAO', '스파오', '탑텐', 'TOPTEN',
-          // 인테리어
-          '이케아', 'IKEA', '무인양품', 'MUJI', '까사미아', '한샘', '리바트', '인테리어',
+        brands: [
+          ...BRAND_GROUPS.TT_SPA,
+          ...BRAND_GROUPS.TT_FOOD_DELIVERY,
+          ...BRAND_GROUPS.TT_INTERIOR,
         ],
       },
-      capPerMonth: areaCap(15_000, 20_000),
+      // 약관: 온라인 쇼핑몰·상품권·건물 내 임대 매장은 할인 제외
+      capPerMonth: TRENDY_CAP,
       priority: 10,
       confidence: 'confirmed',
+      notes: '이 할인을 받은 거래는 실적에서 제외된다',
     },
 
-    // ── 10% 영역 ──────────────────────────────────────────────────────
+    // ── Daily 서비스 (영역별 10,000 / 15,000) ──────────────────────────
     {
-      id: 'tt-dept-cvs',
-      label: '백화점·편의점 10%',
-      type: 'discount',
-      rate: 0.1,
-      match: { brands: [...BRAND_GROUPS.DEPARTMENT, ...BRAND_GROUPS.CONVENIENCE] },
-      capPerMonth: areaCap(10_000, 15_000),
-      priority: 20,
-      confidence: 'confirmed',
-    },
-    {
-      id: 'tt-coffee',
+      id: 'tt-daily-coffee',
       label: '커피·베이커리·아이스크림 10%',
       type: 'discount',
       rate: 0.1,
       match: {
         brands: [...BRAND_GROUPS.CAFE],
         categories: ['카페'],
-        keywords: ['베이커리', '파리바게뜨', '뚜레쥬르', '배스킨라빈스', '설빙'],
+        keywords: ['베이커리', '파리바게뜨', '뚜레쥬르', '배스킨라빈스', '설빙', '아이스크림'],
       },
-      // 건당 2만원 이상이어야 한다. 낮게 잡으면 소액 결제에
-      // 있지도 않은 할인이 붙는다.
+      // 약관: 건당 2만원 이상 이용 시에만 할인
       minAmountPerTx: 20_000,
-      capPerMonth: areaCap(10_000, 15_000),
+      capPerMonth: DAILY_CAP,
       priority: 20,
       confidence: 'confirmed',
     },
     {
-      id: 'tt-transit',
-      label: '대중교통 10%',
+      id: 'tt-daily-transit',
+      label: '대중교통·택시 10%',
       type: 'discount',
       rate: 0.1,
-      // 카드 앱 화면에 '택시'는 별도 영역으로 없다. 대중교통만이다.
-      match: { brands: ['TMONEY'], keywords: ['버스', '지하철', '교통카드'] },
-      capPerMonth: areaCap(10_000, 15_000),
+      match: {
+        brands: ['TMONEY', 'KAKAO_T', 'UBER_TAXI', 'ITAXI'],
+        keywords: ['버스', '지하철', '교통카드', '택시'],
+        // 약관: 시외버스·고속버스·모바일 티머니 후불형은 제외
+        excludeKeywords: ['시외버스', '고속버스'],
+      },
+      // 교통요금은 무승인전표라 실적에서는 빠지지만 할인은 나온다.
+      applyToExcludedSpend: true,
+      capGroup: TRANSIT_GROUP,
+      capGroupLabel: '대중교통·택시·주유',
+      capPerMonth: DAILY_CAP,
       priority: 20,
       confidence: 'confirmed',
     },
-
-    // ── 5% 영역 ───────────────────────────────────────────────────────
     {
-      id: 'tt-mart-pharmacy',
+      id: 'tt-daily-fuel',
+      label: '주유 리터당 100원',
+      type: 'discount',
+      // 리터 수를 모르므로 기준유가로 환산한 근사치다.
+      rate: FUEL_RATE,
+      match: { brands: [...BRAND_GROUPS.TT_FUEL] },
+      capGroup: TRANSIT_GROUP,
+      capPerMonth: DAILY_CAP,
+      priority: 20,
+      confidence: 'estimated',
+      notes: `리터당 100원 → 기준유가 ${ASSUMED_FUEL_PRICE_PER_L.toLocaleString('ko-KR')}원/ℓ 가정으로 환산. 유가에 따라 달라진다`,
+    },
+    {
+      id: 'tt-daily-dept-cvs',
+      label: '백화점·편의점 10%',
+      type: 'discount',
+      rate: 0.1,
+      match: { brands: [...BRAND_GROUPS.TT_DEPT, ...BRAND_GROUPS.TT_CVS] },
+      capPerMonth: DAILY_CAP,
+      priority: 20,
+      confidence: 'confirmed',
+    },
+    {
+      id: 'tt-daily-mart-pharmacy',
       label: '대형마트·약국 5%',
       type: 'discount',
       rate: 0.05,
       match: {
-        brands: [...BRAND_GROUPS.MART, 'PHARMACY'],
+        brands: [...BRAND_GROUPS.TT_MART],
         keywords: ['약국'],
+        // 약관: SSM(이마트에브리데이·홈플러스익스프레스·롯데슈퍼) 제외
+        excludeKeywords: ['에브리데이', '익스프레스', '롯데슈퍼'],
       },
-      // ⚠️ 이 영역만 카드 앱 화면에서 잘려 한도를 못 봤다.
-      //    나머지 5개 합(85,000)과 총 10만원의 차이로 역산한 값이다.
-      capPerMonth: areaCap(10_000, 15_000),
+      capPerMonth: DAILY_CAP,
       priority: 30,
-      confidence: 'estimated',
-      notes: '한도는 총합에서 역산한 추정치 — 카드 앱에서 직접 확인 필요',
+      confidence: 'confirmed',
     },
   ],
 };
