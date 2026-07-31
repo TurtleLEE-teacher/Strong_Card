@@ -4,6 +4,7 @@ import { PushSetup } from '@/components/PushSetup';
 import { getDashboardData } from '@/lib/data';
 import { dateTimeShort, won } from '@/lib/format';
 import { WARNING_DAYS } from '@/lib/alerts/rules';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export const revalidate = 300;
 
@@ -55,6 +56,15 @@ export default async function SettingsPage() {
       <h1 className="mb-6 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
         설정
       </h1>
+
+      <Panel title="화면">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            테마
+          </p>
+          <ThemeToggle />
+        </div>
+      </Panel>
 
       <Panel title="알림">
         <PushSetup vapidPublicKey={vapidPublicKey} />

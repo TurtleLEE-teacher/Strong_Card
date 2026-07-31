@@ -224,15 +224,41 @@ function sameMatcher(a: BenefitRule, b: BenefitRule): boolean {
  * 조건이 완전히 같고 우선순위가 더 높은(숫자가 작은) 룰이 같은 기간에
  * 살아 있으면, selectRule은 항상 그쪽을 고른다 — 이 룰은 존재하지 않는 것과
  * 같다. 프로모션을 기본 요율 위에 겹쳐 쌓는 구조에서 생긴다.
+ *
+ * **적용 구간에서 한도가 0인 룰은 가리지 못한다.** selectRule이 그런 룰을
+ * 건너뛰기 때문이다. 신한EV 충전이 이 경우다 — 50%와 30%는 조건이 같고
+ * 우선순위만 다른데, 구간에 따라 한쪽 한도가 0이 되면서 서로 자리를
+ * 넘겨준다. 이 조건이 없으면 30% 룰이 화면에서 통째로 사라진다.
  */
-function isShadowed(card: Card, rule: BenefitRule, month?: MonthKey): boolean {
+function isShadowed(
+  card: Card,
+  rule: BenefitRule,
+  appliedTier: SpendTier | null,
+  month?: MonthKey,
+): boolean {
   return card.benefits.some(
     (other) =>
       other.id !== rule.id &&
       (other.priority ?? 100) < (rule.priority ?? 100) &&
       sameMatcher(other, rule) &&
+      resolveCap(other.capPerMonth, appliedTier) !== 0 &&
       (!month || isRuleEffectiveInMonth(month, other.effectiveFrom, other.effectiveUntil)),
   );
+}
+
+/**
+ * 이 룰이 처음으로 한도를 갖는 구간을 찾는다.
+ * 실적 미달이라 지금은 0원이지만 얼마를 채우면 얼마가 열리는지 알려 준다.
+ */
+function firstUnlock(
+  card: Card,
+  rule: BenefitRule,
+): { threshold: number; cap: number } | undefined {
+  for (const tier of card.performance.tiers) {
+    const cap = resolveCap(rule.capPerMonth, tier);
+    if (cap !== null && cap > 0) return { threshold: tier.threshold, cap };
+  }
+  return undefined;
 }
 
 export interface ComputeBenefitsInput {
@@ -368,7 +394,7 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
     // 프로모션 룰과 기본 룰을 겹쳐 쌓는 구조(쿠팡와우)에서 기본 룰은
     // 프로모션 기간 내내 한 번도 적용되지 않는데, 목록에 남으면
     // '0 / 20,000원'짜리 줄이 두 배로 늘어 한도를 오해하게 된다.
-    .filter((rule) => !isShadowed(card, rule, month))
+    .filter((rule) => !isShadowed(card, rule, appliedTier, month))
     .map((rule) => {
       const cap = resolveCap(rule.capPerMonth, appliedTier);
       const capKey = rule.capGroup ?? rule.id;
@@ -382,10 +408,13 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
         cap,
         ratio: cap && cap > 0 ? Math.min(1, used / cap) : null,
         txCount: txCount.get(rule.id) ?? 0,
+        // 지금 한도가 0이면 어느 구간에서 열리는지 찾아 둔다.
+        unlock: cap === 0 ? firstUnlock(card, rule) : undefined,
       };
     })
-    // 한도가 0으로 죽은 룰(다른 구간 전용)은 소진액이 없으면 감춘다.
-    .filter((u) => !(u.cap === 0 && u.used === 0));
+    // 어느 구간에서도 열리지 않는 룰만 감춘다. 실적만 채우면 열리는 룰은
+    // 잠긴 채로 남겨야 "이 카드에 뭐가 있는지"를 볼 수 있다.
+    .filter((u) => !(u.cap === 0 && u.used === 0 && !u.unlock));
 
   // 같은 한도를 나눠 쓰는 룰들은 한 줄로 합친다. 안 합치면 화면에
   // '3만원 한도'가 여러 개 있는 것처럼 보여 총 한도를 오해하게 된다.

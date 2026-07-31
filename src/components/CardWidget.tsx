@@ -42,7 +42,13 @@ export function CardWidget({ card, snapshot, daysRemaining }: Props) {
   return (
     <article
       className="overflow-hidden rounded-2xl border"
-      style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+      style={{
+        background: 'var(--surface)',
+        borderColor: 'var(--border)',
+        // 카드끼리 붙어 보이지 않도록 아주 옅은 그림자를 준다.
+        // 테두리를 진하게 하면 안쪽 구분선과 경쟁해서 오히려 시끄럽다.
+        boxShadow: '0 1px 2px rgb(0 0 0 / 0.04), 0 1px 8px rgb(0 0 0 / 0.03)',
+      }}
     >
       {/* 카드 색 마커. 폭을 꽉 채우면 '100% 찬 바'로 읽히므로 짧게 둔다 —
           이 화면의 가로 막대는 전부 데이터다. 짧은 조각은 탭 표시로 읽힌다. */}
@@ -165,9 +171,36 @@ function TierBadge({ snapshot }: { snapshot: CardMonthlySnapshot }) {
 
 // ---------------------------------------------------------------------------
 
-/** 섹션 사이 헤어라인. 표면에서 한 단계만 떨어진 실선 — 점선은 쓰지 않는다. */
-function SectionRule() {
-  return <div className="my-4 h-px" style={{ background: 'var(--border)' }} />;
+/**
+ * 카드 안의 하위 블록.
+ *
+ * 실적과 혜택은 성격이 완전히 다른 정보다(하나는 다음 달을 위한 목표,
+ * 하나는 이번 달에 받은 결과). 구분선 하나로 나누면 긴 목록 속에서 둘이
+ * 섞여 보인다. 각자 옅은 면을 깔아 덩어리로 읽히게 한다.
+ */
+function Block({
+  title,
+  aside,
+  children,
+}: {
+  title: string;
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className="mt-3 rounded-xl p-3"
+      style={{ background: 'var(--surface-alt)' }}
+    >
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h3 className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+          {title}
+        </h3>
+        {aside}
+      </div>
+      {children}
+    </section>
+  );
 }
 
 function PerformanceSection({
@@ -199,21 +232,17 @@ function PerformanceSection({
   const severity = performanceSeverity(ratio, !nextTier, daysRemaining);
 
   return (
-    <>
-      <SectionRule />
-      <section>
-        <div className="mb-2 flex items-baseline justify-between gap-2">
-          <h3 className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-            다음 달을 위한 이번 달 실적
-          </h3>
-          <p className="shrink-0 text-xs tabular" style={{ color: 'var(--text-muted)' }}>
-            <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-              {won(currentSpend)}
-            </span>
-            {goal > 0 && ` / ${wonShort(goal)}`}
-          </p>
-        </div>
-
+    <Block
+      title="다음 달을 위한 이번 달 실적"
+      aside={
+        <p className="shrink-0 text-xs tabular" style={{ color: 'var(--text-muted)' }}>
+          <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {won(currentSpend)}
+          </span>
+          {goal > 0 && ` / ${wonShort(goal)}`}
+        </p>
+      }
+    >
         <Meter
           ratio={ratio}
           severity={severity}
@@ -239,8 +268,7 @@ function PerformanceSection({
             실적 제외 {won(snapshot.excludedSpend)}
           </p>
         )}
-      </section>
-    </>
+    </Block>
   );
 }
 
@@ -276,26 +304,23 @@ function BenefitSection({
   const exhausted = capped.filter((u) => (u.ratio ?? 0) >= 1).length;
 
   return (
-    <>
-      <SectionRule />
-      <section>
-        <div className="mb-2.5 flex items-baseline justify-between gap-2">
-          <h3 className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-            혜택 영역
-          </h3>
-          {capped.length > 0 && (
-            <p className="shrink-0 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-              {headroom > 0 ? (
-                <>
-                  <span className="tabular">{won(headroom)}</span> 더 받을 수 있음
-                  {exhausted > 0 && ` · ${exhausted}개 소진`}
-                </>
-              ) : (
-                '모든 영역 소진'
-              )}
-            </p>
-          )}
-        </div>
+    <Block
+      title="혜택 영역"
+      aside={
+        capped.length > 0 ? (
+          <p className="shrink-0 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            {headroom > 0 ? (
+              <>
+                <span className="tabular">{won(headroom)}</span> 더 받을 수 있음
+                {exhausted > 0 && ` · ${exhausted}개 소진`}
+              </>
+            ) : (
+              '모든 영역 소진'
+            )}
+          </p>
+        ) : undefined
+      }
+    >
 
         {/* 라벨을 바 옆에 두면 '스타벅스·이디야 20% 할인' 같은 이름이 잘린다.
             라벨/수치를 윗줄에, 바를 아랫줄에 두면 폭에 관계없이 온전히 보인다. */}
@@ -320,7 +345,6 @@ function BenefitSection({
               {won(Math.abs(snapshot.reconciliationDelta))} 차이 — 제외 규칙 점검 필요
             </p>
           )}
-      </section>
-    </>
+    </Block>
   );
 }

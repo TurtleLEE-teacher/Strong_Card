@@ -1,6 +1,6 @@
 import type { BenefitUsage } from '@/lib/types';
 import { Meter } from './Meter';
-import { dateTimeShort, won } from '@/lib/format';
+import { dateTimeShort, won, wonShort } from '@/lib/format';
 
 /**
  * 혜택 영역 한 줄 — 대시보드 위젯과 카드 상세가 **같은 컴포넌트**를 쓴다.
@@ -62,6 +62,9 @@ export function UsageRow({
 }) {
   const isFull = usage.cap !== null && usage.cap > 0 && (usage.ratio ?? 0) >= 1;
   const expandable = (contributions?.length ?? 0) > 0;
+  // 실적 미달이라 아직 안 열린 영역. 지우지 않고 잠긴 채로 보여준다 —
+  // "이 카드에 어떤 혜택이 있나"가 가장 궁금한 시점이 바로 이때다.
+  const locked = usage.cap === 0 && usage.unlock !== undefined;
 
   const body = (
     <>
@@ -74,6 +77,17 @@ export function UsageRow({
           )}
         </span>
         <span className="flex shrink-0 items-baseline gap-1.5">
+          {locked && (
+            <span
+              className="rounded px-1 py-px text-[10px] font-medium"
+              style={{
+                background: 'var(--surface-alt)',
+                color: 'var(--text-muted)',
+              }}
+            >
+              실적 미달
+            </span>
+          )}
           {isFull && (
             <span
               className="rounded px-1 py-px text-[10px] font-medium"
@@ -88,9 +102,11 @@ export function UsageRow({
           {/* 단위는 분모에만 붙인다. 둘 다 붙이면 좁은 폭에서 줄이 밀리고,
               아예 없으면 화면의 다른 금액과 표기가 갈린다. */}
           <span className="text-[11px] tabular" style={{ color: 'var(--text-muted)' }}>
-            {usage.cap === null
-              ? won(usage.used)
-              : `${usage.used.toLocaleString('ko-KR')} / ${won(usage.cap)}`}
+            {locked
+              ? `${wonShort(usage.unlock!.threshold)} 채우면 ${won(usage.unlock!.cap)}`
+              : usage.cap === null
+                ? won(usage.used)
+                : `${usage.used.toLocaleString('ko-KR')} / ${won(usage.cap)}`}
           </span>
         </span>
       </div>
@@ -100,7 +116,9 @@ export function UsageRow({
         <Meter
           height={6}
           ratio={usage.ratio ?? 0}
-          color={seriesColor}
+          // 잠긴 영역은 카드색 대신 회색 트랙만 — 색이 있으면 받고 있는
+          // 혜택으로 오해한다.
+          color={locked ? 'var(--text-muted)' : seriesColor}
           ariaLabel={`${usage.label} ${won(usage.used)} / 한도 ${won(usage.cap)}${
             isFull ? ' (소진)' : ''
           }`}

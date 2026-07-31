@@ -35,8 +35,15 @@
   --meter-accent: #2a78d6;
 }
 
+/*
+ * 기본은 **라이트**다. 시스템이 다크여도 사용자가 직접 고르기 전까지는
+ * 라이트로 둔다 — 이 앱은 숫자를 읽는 화면이고, 밝은 배경에서 바 색의
+ * 명도 대비가 더 안정적이다. 선택은 data-theme으로만 바뀐다.
+ *
+ * (시스템 자동 추종을 원하면 설정에서 '시스템'을 고르면 된다.)
+ */
 @media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) {
+  :root[data-theme="system"] {
     color-scheme: dark;
     --background: #121211;
     --surface: #1a1a19;
