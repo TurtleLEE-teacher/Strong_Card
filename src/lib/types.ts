@@ -300,6 +300,14 @@ export interface BenefitUsage {
   /** cap이 null이면 null */
   ratio: number | null;
   txCount: number;
+  /**
+   * 지금 구간에서 한도가 0일 때, **얼마를 채우면 얼마가 열리는지**.
+   *
+   * 실적 미달이면 모든 영역의 한도가 0이 된다. 그 행들을 목록에서 지우면
+   * 카드에 아무것도 안 보이는데, 정작 "이 카드에 어떤 혜택이 있나"가 가장
+   * 궁금한 시점이 바로 그때다. 지우는 대신 잠긴 상태로 보여준다.
+   */
+  unlock?: { threshold: number; cap: number };
 }
 
 /** 실적 제외 내역 요약 */

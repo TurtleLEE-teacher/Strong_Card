@@ -279,3 +279,51 @@ describe('가려진 룰은 화면에 뜨지 않는다', () => {
     ]);
   });
 });
+
+describe('실적 미달이어도 어떤 혜택이 있는지 보여준다', () => {
+  /**
+   * 실적이 없으면 모든 영역의 한도가 0이 된다. 그 행을 목록에서 지우면
+   * 카드에 아무것도 안 보이는데, "이 카드에 무슨 혜택이 있나"가 가장
+   * 궁금한 시점이 바로 그때다. 잠긴 상태로 남겨야 한다.
+   */
+  it.each(CARDS.filter((c) => c.performance.required).map((c) => [c.id, c] as const))(
+    '%s: 거래가 하나도 없어도 영역 목록이 비지 않는다',
+    (_id, card) => {
+      const result = computeBenefits({
+        card,
+        transactions: [],
+        appliedTier: card.performance.tiers[0], // 실적 미달
+        month: '2026-07',
+      });
+      expect(result.usage.length).toBeGreaterThan(0);
+      // 잠긴 영역은 얼마를 채우면 얼마가 열리는지 알려줘야 한다
+      for (const u of result.usage.filter((x) => x.cap === 0)) {
+        expect(u.unlock, `${u.ruleId}에 unlock 정보 없음`).toBeDefined();
+        expect(u.unlock!.cap).toBeGreaterThan(0);
+      }
+    },
+  );
+
+  /**
+   * 신한EV 충전 50%/30%는 조건이 같고 우선순위만 다른데, 구간에 따라
+   * 한쪽 한도가 0이 되면서 서로 자리를 넘겨준다. 한도 0인 룰은 selectRule이
+   * 건너뛰므로 다른 룰을 가리지 못한다 — 가린다고 보면 30% 룰이 화면에서
+   * 통째로 사라진다.
+   */
+  it('구간에 따라 교대하는 룰이 서로를 지우지 않는다', () => {
+    const ev = CARDS.find((c) => c.id === 'shinhan-ev')!;
+    for (const tier of ev.performance.tiers) {
+      const ids = computeBenefits({
+        card: ev,
+        transactions: [],
+        appliedTier: tier,
+        month: '2026-07',
+      }).usage.map((u) => u.ruleId);
+      // 60만 구간에서만 30% 룰이 완전히 죽는다 (50%가 실제로 적용되므로)
+      const expected = tier.threshold >= 600_000 ? ['ev-charge-50'] : ['ev-charge-50', 'ev-charge-30'];
+      for (const id of expected) {
+        expect(ids, `${tier.label} 구간에 ${id} 없음`).toContain(id);
+      }
+    }
+  });
+});
