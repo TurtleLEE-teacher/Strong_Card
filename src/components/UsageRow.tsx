@@ -1,6 +1,6 @@
 import type { BenefitUsage } from '@/lib/types';
 import { Meter } from './Meter';
-import { won } from '@/lib/format';
+import { dateTimeShort, won } from '@/lib/format';
 
 /**
  * 혜택 영역 한 줄 — 대시보드 위젯과 카드 상세가 **같은 컴포넌트**를 쓴다.
@@ -14,22 +14,60 @@ import { won } from '@/lib/format';
  * 쓰라는 규칙이기도 하고, 영역 여섯 개가 전부 빨개지면 정작 급한
  * 실적 미달 경고가 묻히기 때문이기도 하다.
  */
+
+/** 이 영역의 한도를 깎은 거래 한 건 */
+export interface UsageContribution {
+  transactionId: string;
+  title: string;
+  approvedAt: string;
+  krwAmount: number;
+  /** 이 거래로 받은 혜택 */
+  netAmount: number;
+  /** 어떤 룰로 걸렸는지 — 영역 안에 여러 룰이 묶여 있을 때 필요하다 */
+  ruleLabel: string;
+  /** 왜 깎였는지. 0원이 된 이유를 설명하는 데 쓴다. */
+  cappedBy: 'none' | 'per-tx' | 'per-month' | 'total';
+}
+
+/** 0원이 된 거래에 붙일 이유. 이게 없으면 "왜 안 받았지"를 알 수 없다. */
+function cappedReason(c: UsageContribution): string | null {
+  if (c.netAmount > 0) return null;
+  switch (c.cappedBy) {
+    case 'per-month':
+      return '월 한도 소진';
+    case 'total':
+      return '카드 통합 한도 소진';
+    case 'per-tx':
+      return '건당 한도';
+    default:
+      return '혜택 없음';
+  }
+}
+
 export function UsageRow({
   usage,
   seriesColor,
   showCount = false,
+  contributions,
 }: {
   usage: BenefitUsage;
   seriesColor: string;
   /** 적용 건수를 라벨 옆에 붙인다. 상세 화면에서만 쓴다. */
   showCount?: boolean;
+  /**
+   * 이 영역의 혜택을 만든 거래들. 주면 줄이 펼침 가능해진다.
+   * 대시보드는 주지 않고, 상세 화면만 준다.
+   */
+  contributions?: UsageContribution[];
 }) {
   const isFull = usage.cap !== null && usage.cap > 0 && (usage.ratio ?? 0) >= 1;
+  const expandable = (contributions?.length ?? 0) > 0;
 
-  return (
-    <li>
+  const body = (
+    <>
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <span className="min-w-0 truncate text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+          {expandable && <span aria-hidden className="mr-1 inline-block chevron">▸</span>}
           {usage.label}
           {showCount && usage.txCount > 0 && (
             <span style={{ color: 'var(--text-muted)' }}> · {usage.txCount}건</span>
@@ -68,6 +106,52 @@ export function UsageRow({
           }`}
         />
       )}
+    </>
+  );
+
+  if (!expandable) return <li>{body}</li>;
+
+  // 펼침은 <details>로 한다 — 자바스크립트 없이 동작하고, 서버 컴포넌트에서
+  // 그대로 쓸 수 있으며, 키보드·스크린리더가 기본으로 지원한다.
+  return (
+    <li>
+      <details className="group">
+        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          {body}
+        </summary>
+        <ul className="mt-2 ml-3 space-y-1.5 border-l pl-3" style={{ borderColor: 'var(--border)' }}>
+          {contributions!.map((c) => (
+            <li key={c.transactionId} className="flex items-baseline justify-between gap-2">
+              <span className="min-w-0">
+                <span
+                  className="block truncate text-[11px]"
+                  style={{ color: 'var(--text-primary)' }}
+                >
+                  {c.title}
+                </span>
+                <span className="block text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  {dateTimeShort(c.approvedAt)} · {won(c.krwAmount)} · {c.ruleLabel}
+                </span>
+              </span>
+              {c.netAmount > 0 ? (
+                <span
+                  className="shrink-0 text-[11px] font-medium tabular"
+                  style={{ color: 'var(--status-good)' }}
+                >
+                  +{won(c.netAmount)}
+                </span>
+              ) : (
+                <span
+                  className="shrink-0 text-[10px]"
+                  style={{ color: 'var(--status-serious)' }}
+                >
+                  {cappedReason(c)}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </details>
     </li>
   );
 }

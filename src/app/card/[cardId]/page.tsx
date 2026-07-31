@@ -4,7 +4,9 @@ import { ACTIVE_CARDS, CARDS_BY_ID } from '@/config/cards';
 import { findMissedBenefits } from '@/lib/engine/recommend';
 import { getDashboardData } from '@/lib/data';
 import { Meter } from '@/components/Meter';
-import { UsageRow } from '@/components/UsageRow';
+import { UsageRow, type UsageContribution } from '@/components/UsageRow';
+import { CardFace } from '@/components/CardFace';
+import { issuerLabel } from '@/config/issuers';
 import { performanceSeverity } from '@/lib/severity';
 import { dateTimeShort, monthLabel, monthShort, won, wonShort } from '@/lib/format';
 import { previousMonthKey } from '@/lib/date';
@@ -46,6 +48,36 @@ export default async function CardDetailPage({
 
   const seriesColor = `var(--series-${card.slot})`;
 
+  // 영역별로 "어떤 결제가 이 혜택을 만들었나"를 모은다.
+  // BenefitUsage.ruleId는 공유 한도(capGroup)면 그룹 키라서, 그 그룹에 속한
+  // 룰 전부의 거래를 합쳐야 한 영역의 내역이 된다.
+  const txById = new Map(monthTx.map((tx) => [tx.id, tx]));
+  const contributionsFor = (usage: (typeof snapshot.benefitUsage)[number]): UsageContribution[] => {
+    const ruleIds = usage.capGroup
+      ? new Set(card.benefits.filter((r) => r.capGroup === usage.capGroup).map((r) => r.id))
+      : new Set([usage.ruleId]);
+    return snapshot.appliedBenefits
+      // 0원이 된 건도 남긴다 — '왜 혜택을 못 받았나'가 오히려 더 궁금한
+      // 정보이고, 빼면 위의 '·N건' 표기와 목록 길이가 어긋난다.
+      .filter((b) => ruleIds.has(b.ruleId))
+      .map((b) => {
+        const tx = txById.get(b.transactionId);
+        return tx
+          ? {
+              transactionId: b.transactionId,
+              title: tx.title,
+              approvedAt: tx.approvedAt,
+              krwAmount: tx.krwAmount,
+              netAmount: b.netAmount,
+              ruleLabel: b.ruleLabel,
+              cappedBy: b.cappedBy,
+            }
+          : null;
+      })
+      .filter((x): x is UsageContribution => x !== null)
+      .sort((a, b) => new Date(b.approvedAt).getTime() - new Date(a.approvedAt).getTime());
+  };
+
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-6 pb-16 sm:px-6">
       <Link
@@ -57,18 +89,19 @@ export default async function CardDetailPage({
       </Link>
 
       <header className="mb-6 flex items-start gap-3">
-        <span
-          aria-hidden
-          className="mt-1 size-3 shrink-0 rounded-full"
-          style={{ background: seriesColor }}
-        />
+        <span className="mt-0.5">
+          <CardFace issuer={card.issuer} last4={card.last4} seriesColor={seriesColor} />
+        </span>
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+          {/* 카드사를 먼저 크게. 상품명은 그 아래. */}
+          <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+            {issuerLabel(card.issuer)}
+          </p>
+          <h1 className="text-lg font-semibold leading-tight" style={{ color: 'var(--text-primary)' }}>
             {card.name}
           </h1>
-          <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-            {card.issuer} · {card.last4.join(', ')} · 연회비 {won(card.annualFee)} ·{' '}
-            {monthLabel(month)}
+          <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+            {card.last4.join(', ')} · 연회비 {won(card.annualFee)} · {monthLabel(month)}
           </p>
         </div>
       </header>
@@ -159,7 +192,7 @@ export default async function CardDetailPage({
 
       {/* 대시보드 위젯은 상위 4개만 보여주므로, 전체는 여기서 확인한다 */}
       {snapshot.benefitUsage.length > 0 && (
-        <Panel title="혜택별 소진 현황">
+        <Panel title="혜택별 소진 현황" subtitle="영역을 눌러 어떤 결제로 받았는지 펼쳐 보세요">
           <ul className="space-y-3">
             {snapshot.benefitUsage.map((usage) => (
               <UsageRow
@@ -167,6 +200,7 @@ export default async function CardDetailPage({
                 usage={usage}
                 seriesColor={seriesColor}
                 showCount
+                contributions={contributionsFor(usage)}
               />
             ))}
           </ul>
@@ -252,16 +286,29 @@ export default async function CardDetailPage({
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
   return (
     <section
       className="mb-3 rounded-2xl border p-4 sm:p-5"
       style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
     >
-      <h2 className="mb-3 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+      <h2 className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
         {title}
       </h2>
-      {children}
+      {subtitle && (
+        <p className="mt-0.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          {subtitle}
+        </p>
+      )}
+      <div className="mt-3">{children}</div>
     </section>
   );
 }

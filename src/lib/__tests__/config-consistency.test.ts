@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import { CARDS } from '@/config/cards';
 import { BRAND_ALIASES } from '@/config/merchants';
-import { matchesRule } from '@/lib/engine/benefits';
+import { computeBenefits, matchesRule } from '@/lib/engine/benefits';
 import { isRuleEffective } from '@/lib/date';
 import type { Card, Transaction } from '@/lib/types';
 
@@ -234,3 +234,48 @@ function isCatchAll(rule: Card['benefits'][number]): boolean {
     !m.brands?.length && !m.keywords?.length && !m.categories?.length && !m.paymentKinds?.length
   );
 }
+
+describe('가려진 룰은 화면에 뜨지 않는다', () => {
+  /**
+   * 프로모션을 기본 요율 위에 겹쳐 쌓으면(쿠팡와우) 기본 룰은 프로모션 기간
+   * 내내 한 번도 적용되지 않는다. 목록에 남으면 '0 / 20,000원' 줄이 두 배로
+   * 늘어 한도를 실제의 두 배로 오해하게 된다.
+   */
+  it('쿠팡와우는 프로모션 기간에 프로모션 룰만 보여준다', () => {
+    const card = CARDS.find((c) => c.id === 'kb-coupang-wow')!;
+    const result = computeBenefits({
+      card,
+      transactions: [],
+      appliedTier: card.performance.tiers[0],
+      month: '2026-07', // 프로모션 기간(2026-04-15 ~ 10-15)
+    });
+    const ids = result.usage.map((u) => u.ruleId).sort();
+    expect(ids).toEqual(['cw-coupang-promo', 'cw-other-promo']);
+  });
+
+  it('프로모션이 끝나면 기본 룰만 보여준다', () => {
+    const card = CARDS.find((c) => c.id === 'kb-coupang-wow')!;
+    const result = computeBenefits({
+      card,
+      transactions: [],
+      appliedTier: card.performance.tiers[0],
+      month: '2026-12', // 프로모션 종료 후
+    });
+    const ids = result.usage.map((u) => u.ruleId).sort();
+    expect(ids).toEqual(['cw-coupang-base', 'cw-other-base']);
+  });
+
+  it('프로모션 시작 전에도 기본 룰이 살아 있다 (빈틈 없음)', () => {
+    const card = CARDS.find((c) => c.id === 'kb-coupang-wow')!;
+    const result = computeBenefits({
+      card,
+      transactions: [],
+      appliedTier: card.performance.tiers[0],
+      month: '2026-01',
+    });
+    expect(result.usage.map((u) => u.ruleId).sort()).toEqual([
+      'cw-coupang-base',
+      'cw-other-base',
+    ]);
+  });
+});
