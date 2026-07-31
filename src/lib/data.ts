@@ -5,7 +5,7 @@ import { ACTIVE_CARDS } from '@/config/cards';
 import { buildAllSnapshots, findUnmappedTransactions } from '@/lib/engine/snapshot';
 import { currentMonthKey, daysRemainingInMonth, type MonthKey } from '@/lib/date';
 import { DEMO_TRANSACTIONS } from '@/lib/demo-data';
-import { manualPreviousSpend } from '@/config/manual-spend';
+import { knownSpendFor } from '@/config/manual-spend';
 
 /**
  * 대시보드가 필요로 하는 모든 것을 한 번에 조립한다.
@@ -57,7 +57,7 @@ export async function getDashboardData(month?: MonthKey): Promise<DashboardData>
       transactions,
       targetMonth,
       // 데모 데이터에는 지난달 거래가 들어 있으므로 수동값을 섞지 않는다.
-      isDemo ? {} : manualPreviousSpend(),
+      isDemo ? undefined : knownSpendFor,
     ),
     unmapped: findUnmappedTransactions(transactions, targetMonth),
     transactions,
