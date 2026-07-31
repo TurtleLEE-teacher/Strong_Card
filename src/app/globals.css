@@ -108,3 +108,12 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* 펼침 표시 — <details>가 열리면 삼각형을 돌린다. */
+details[open] > summary .chevron {
+  transform: rotate(90deg);
+}
+.chevron {
+  transition: transform 150ms ease;
+  transform-origin: center;
+}

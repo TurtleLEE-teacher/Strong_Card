@@ -2,6 +2,8 @@ import Link from 'next/link';
 import type { Card, CardMonthlySnapshot } from '@/lib/types';
 import { Meter, type MeterTick } from './Meter';
 import { UsageRow } from './UsageRow';
+import { CardFace } from './CardFace';
+import { issuerLabel } from '@/config/issuers';
 import { performanceSeverity } from '@/lib/severity';
 import { monthShort, won, wonShort } from '@/lib/format';
 import { previousMonthKey } from '@/lib/date';
@@ -80,25 +82,29 @@ function Header({
   const sourceMonth = monthShort(previousMonthKey(snapshot.month));
   const basis = card.performance.required
     ? `${sourceMonth} 실적 ${snapshot.appliedTier?.label ?? '미달'} 기준`
-    : `${card.issuer} · ${card.last4.join(', ')}`;
+    : '실적 조건 없음';
 
   return (
     <header>
       <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            aria-hidden
-            className="size-2.5 shrink-0 rounded-full"
-            style={{ background: seriesColor }}
-          />
-          <Link
-            href={`/card/${card.id}`}
-            className="truncate text-[15px] font-semibold hover:underline"
-            style={{ color: 'var(--text-primary)' }}
-          >
-            {card.shortName}
-          </Link>
-        </div>
+        {/* 카드사를 앞세운다. 지갑에서 카드를 고를 때 먼저 보는 게 카드사다. */}
+        <Link href={`/card/${card.id}`} className="flex min-w-0 items-center gap-2.5 group">
+          <CardFace issuer={card.issuer} last4={card.last4} seriesColor={seriesColor} />
+          <span className="min-w-0">
+            <span
+              className="block truncate text-[15px] font-semibold leading-tight group-hover:underline"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {issuerLabel(card.issuer)}
+            </span>
+            <span
+              className="block truncate text-xs leading-tight"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {card.shortName}
+            </span>
+          </span>
+        </Link>
         {card.performance.required ? <TierBadge snapshot={snapshot} /> : <Chip>무실적</Chip>}
       </div>
 
@@ -256,10 +262,11 @@ function BenefitSection({
   // 한도가 있는 영역은 전부 보여준다. 카드사 앱도 영역별로 나눠 보여주고,
   // 그게 이 화면의 핵심 정보다. 잘라내면 "어느 영역이 남았나"에 답을 못 한다.
   // 한도 없는 적립(ZERO 등)만 길어질 수 있어 그쪽만 접는다.
+  // 한도가 있는 영역을 먼저, 한도 없는 적립을 뒤에 둔다. 전부 보여준다 —
+  // 잘라내면 "어느 영역이 남았나"라는 이 화면의 본래 질문에 답을 못 한다.
   const capped = allUsage.filter((u) => u.cap !== null);
   const uncapped = allUsage.filter((u) => u.cap === null);
-  const activeUsage = [...capped, ...uncapped.slice(0, 4)];
-  const hiddenCount = uncapped.length - Math.min(uncapped.length, 4);
+  const activeUsage = [...capped, ...uncapped];
 
   if (activeUsage.length === 0) return null;
 
@@ -298,15 +305,13 @@ function BenefitSection({
           ))}
         </ul>
 
-        {hiddenCount > 0 && (
-          <Link
-            href={`/card/${card.id}`}
-            className="mt-2.5 inline-block text-[11px] hover:underline"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            혜택 {hiddenCount}개 더 보기 →
-          </Link>
-        )}
+        <Link
+          href={`/card/${card.id}`}
+          className="mt-3 inline-block text-[11px] hover:underline"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          어떤 결제로 받았는지 보기 →
+        </Link>
 
         {snapshot.reconciliationDelta !== null &&
           Math.abs(snapshot.reconciliationDelta) > 1000 && (

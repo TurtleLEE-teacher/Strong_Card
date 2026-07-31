@@ -202,6 +202,39 @@ export function matchesAnyRule(card: Card, tx: Transaction): boolean {
   );
 }
 
+/** 매칭 조건이 완전히 같은 두 룰인지 (가려짐 판정에 쓴다) */
+function sameMatcher(a: BenefitRule, b: BenefitRule): boolean {
+  const key = (r: BenefitRule) =>
+    JSON.stringify([
+      [...(r.match.brands ?? [])].sort(),
+      [...(r.match.keywords ?? [])].sort(),
+      [...(r.match.categories ?? [])].sort(),
+      [...(r.match.paymentKinds ?? [])].sort(),
+      [...(r.match.excludeKeywords ?? [])].sort(),
+      r.timeWindow ?? null,
+      [...(r.daysOfWeek ?? [])].sort(),
+      r.minAmountPerTx ?? null,
+    ]);
+  return key(a) === key(b);
+}
+
+/**
+ * 이 룰이 같은 달 내내 다른 룰에 가려져 한 번도 적용될 수 없는가.
+ *
+ * 조건이 완전히 같고 우선순위가 더 높은(숫자가 작은) 룰이 같은 기간에
+ * 살아 있으면, selectRule은 항상 그쪽을 고른다 — 이 룰은 존재하지 않는 것과
+ * 같다. 프로모션을 기본 요율 위에 겹쳐 쌓는 구조에서 생긴다.
+ */
+function isShadowed(card: Card, rule: BenefitRule, month?: MonthKey): boolean {
+  return card.benefits.some(
+    (other) =>
+      other.id !== rule.id &&
+      (other.priority ?? 100) < (rule.priority ?? 100) &&
+      sameMatcher(other, rule) &&
+      (!month || isRuleEffectiveInMonth(month, other.effectiveFrom, other.effectiveUntil)),
+  );
+}
+
 export interface ComputeBenefitsInput {
   card: Card;
   /** 이번 달 거래 (해당 카드로 이미 필터링된 것) */
@@ -331,6 +364,11 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
       (rule) =>
         !month || isRuleEffectiveInMonth(month, rule.effectiveFrom, rule.effectiveUntil),
     )
+    // 더 높은 우선순위의 같은 조건 룰에 완전히 가려진 룰은 감춘다.
+    // 프로모션 룰과 기본 룰을 겹쳐 쌓는 구조(쿠팡와우)에서 기본 룰은
+    // 프로모션 기간 내내 한 번도 적용되지 않는데, 목록에 남으면
+    // '0 / 20,000원'짜리 줄이 두 배로 늘어 한도를 오해하게 된다.
+    .filter((rule) => !isShadowed(card, rule, month))
     .map((rule) => {
       const cap = resolveCap(rule.capPerMonth, appliedTier);
       const capKey = rule.capGroup ?? rule.id;
