@@ -1,6 +1,8 @@
 import type { BenefitUsage } from '@/lib/types';
 import { Meter } from './Meter';
 import { dateTimeShort, won, wonShort } from '@/lib/format';
+import { RuleGuideList } from './RuleGuideList';
+import type { RuleGuide } from '@/lib/rule-guide';
 
 /**
  * 혜택 영역 한 줄 — 대시보드 위젯과 카드 상세가 **같은 컴포넌트**를 쓴다.
@@ -49,6 +51,7 @@ export function UsageRow({
   seriesColor,
   showCount = false,
   tierUnknown = false,
+  guides,
   contributions,
 }: {
   usage: BenefitUsage;
@@ -58,13 +61,23 @@ export function UsageRow({
   /** 전월실적을 모르는 상태. '미달'이라고 단정하지 않는다. */
   tierUnknown?: boolean;
   /**
+   * 이 영역을 구성하는 규칙들 — 어디서 어떻게 써야 받는지.
+   * 주면 펼침에 '사용 조건'이 함께 나온다.
+   */
+  guides?: RuleGuide[];
+  /**
    * 이 영역의 혜택을 만든 거래들. 주면 줄이 펼침 가능해진다.
    * 대시보드는 주지 않고, 상세 화면만 준다.
    */
   contributions?: UsageContribution[];
 }) {
   const isFull = usage.cap !== null && usage.cap > 0 && (usage.ratio ?? 0) >= 1;
-  const expandable = (contributions?.length ?? 0) > 0;
+  // 사용 조건만 있어도 펼칠 값어치가 있다 — "어디서 써야 받나"가 결제
+  // 직전에 가장 궁금한 정보다.
+  const expandable = (contributions?.length ?? 0) > 0 || (guides?.length ?? 0) > 0;
+  // 금액은 남았는데 횟수를 다 쓴 규칙. 바만 보면 여유가 있어 보여서
+  // 이걸 따로 알리지 않으면 헛돈을 쓰게 된다.
+  const countExhausted = guides?.filter((g) => g.counts?.exhausted).length ?? 0;
   // 실적 미달이라 아직 안 열린 영역. 지우지 않고 잠긴 채로 보여준다 —
   // "이 카드에 어떤 혜택이 있나"가 가장 궁금한 시점이 바로 이때다.
   const locked = usage.cap === 0 && usage.unlock !== undefined;
@@ -100,6 +113,17 @@ export function UsageRow({
               }}
             >
               소진
+            </span>
+          )}
+          {!isFull && countExhausted > 0 && (
+            <span
+              className="rounded px-1 py-px text-[10px] font-medium"
+              style={{
+                background: 'color-mix(in oklab, var(--status-warning) 20%, transparent)',
+                color: 'var(--status-serious)',
+              }}
+            >
+              횟수 소진 {countExhausted}
             </span>
           )}
           {/* 단위는 분모에만 붙인다. 둘 다 붙이면 좁은 폭에서 줄이 밀리고,
@@ -142,8 +166,22 @@ export function UsageRow({
         <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
           {body}
         </summary>
-        <ul className="mt-2 ml-3 space-y-1.5 border-l pl-3" style={{ borderColor: 'var(--border)' }}>
-          {contributions!.map((c) => (
+        <div className="mt-2 ml-3 border-l pl-3" style={{ borderColor: 'var(--border)' }}>
+          {guides && guides.length > 0 && (
+            <div className="mb-3">
+              <p className="mb-1.5 text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                어디서 어떻게 써야 받나
+              </p>
+              <RuleGuideList guides={guides} />
+            </div>
+          )}
+          {contributions && contributions.length > 0 && (
+            <p className="mb-1.5 text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>
+              이번 달 사용 내역
+            </p>
+          )}
+        <ul className="space-y-1.5">
+          {(contributions ?? []).map((c) => (
             <li key={c.transactionId} className="flex items-baseline justify-between gap-2">
               <span className="min-w-0">
                 <span
@@ -174,6 +212,7 @@ export function UsageRow({
             </li>
           ))}
         </ul>
+        </div>
       </details>
     </li>
   );
