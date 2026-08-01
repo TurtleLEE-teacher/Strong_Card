@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { CARDS_BY_ID } from '@/config/cards';
 import { CardWidget } from '@/components/CardWidget';
 import { getDashboardData } from '@/lib/data';
-import { monthLabel, won } from '@/lib/format';
+import { monthLabel, monthShort, won } from '@/lib/format';
 
 export const revalidate = 300; // Notion API 3req/s 제한 회피
 
@@ -50,9 +50,13 @@ export default async function DashboardPage() {
         </div>
 
         {/* 히어로 숫자는 화면당 하나. 이 앱이 존재하는 이유가 이 숫자다.
-            큰 숫자에는 tabular를 쓰지 않는다 — 자간이 헐거워 보인다. */}
+            큰 숫자에는 tabular를 쓰지 않는다 — 자간이 헐거워 보인다.
+
+            달을 이름으로 못 박는다. '이번 달'은 읽는 사람이 달력을 떠올려야
+            뜻이 서는 말이고, 바로 아래에 '7월 실적 기준'이라는 줄이 따라오면
+            이 숫자까지 지난달 것으로 읽힌다. */}
         <p className="mt-5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-          이번 달 받은 혜택
+          {monthShort(month)}에 받은 혜택
         </p>
         <p
           className="text-5xl font-semibold tracking-tight"
