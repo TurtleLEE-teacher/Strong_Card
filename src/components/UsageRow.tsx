@@ -201,6 +201,15 @@ export function UsageRow({
                 >
                   +{won(c.netAmount)}
                 </span>
+              ) : c.netAmount < 0 ? (
+                /* 취소로 되돌려받은 한도. 부호를 그대로 보여줘야 위의
+                   소진량이 왜 줄었는지 이 줄에서 설명이 끝난다. */
+                <span
+                  className="shrink-0 text-[11px] font-medium tabular"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  −{won(-c.netAmount)} 회수
+                </span>
               ) : (
                 <span
                   className="shrink-0 text-[10px]"

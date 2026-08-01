@@ -9,6 +9,9 @@
  *   1. 건당 한도 (capPerTx)
  *   2. 룰별 월 한도 (capPerMonth) — 적용 구간에 따라 달라질 수 있음
  *   3. 카드 통합 월 한도 (appliedTier.totalBenefitCap)
+ *
+ * 취소 전표(음수 금액)는 원거래에 붙었던 혜택을 **되감아** 한도를
+ * 돌려준다. 짝짓기는 engine/reversal.ts가 한다.
  */
 
 import type {
@@ -31,6 +34,7 @@ import {
   toKstDateString,
   type MonthKey,
 } from '@/lib/date';
+import { isReversal, linkReversals } from './reversal';
 
 export interface BenefitResult {
   appliedBenefits: AppliedBenefit[];
@@ -184,6 +188,24 @@ export class UsageCounters {
     this.monthly.set(rule.id, (this.monthly.get(rule.id) ?? 0) + 1);
     const key = `${rule.id}:${toKstDateString(tx.approvedAt)}`;
     this.daily.set(key, (this.daily.get(key) ?? 0) + 1);
+  }
+
+  /**
+   * 취소된 거래가 태운 횟수를 돌려준다.
+   *
+   * **원거래의 승인일**로 일 횟수를 되돌린다 — 하루 1회짜리 혜택을
+   * 취소일 기준으로 되돌리면 엉뚱한 날의 잔여 횟수가 늘어난다.
+   *
+   * 이미 지나간 거래에 소급 적용하지는 않는다. 5회를 다 써서 6번째가
+   * 혜택을 못 받았는데 그 뒤에 취소가 들어와도, 6번째는 그대로 0원이다.
+   * 카드사도 그렇게 처리한다.
+   */
+  release(rule: BenefitRule, tx: Transaction): void {
+    const month = this.monthly.get(rule.id) ?? 0;
+    if (month > 0) this.monthly.set(rule.id, month - 1);
+    const key = `${rule.id}:${toKstDateString(tx.approvedAt)}`;
+    const day = this.daily.get(key) ?? 0;
+    if (day > 0) this.daily.set(key, day - 1);
   }
 
   countFor(ruleId: string): number {
@@ -374,7 +396,74 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
   const noBenefit: Record<string, NoBenefitNote> = {};
   let totalUsed = 0;
 
+  // 취소 전표를 원거래에 미리 짝지어 둔다. 거래를 시각순으로 도는 이상
+  // 원거래는 항상 먼저 처리되므로, 전표를 만날 때는 되감을 금액이 이미
+  // appliedByTx에 들어 있다.
+  const links = linkReversals(input.transactions);
+  const appliedByTx = new Map<string, AppliedBenefit>();
+  const txById = new Map(transactions.map((t) => [t.id, t]));
+
   for (const tx of transactions) {
+    /*
+     * 취소 전표(음수) — 원거래에 붙었던 혜택을 **되감는다.**
+     *
+     * 그냥 건너뛰면 취소한 결제가 태운 한도가 영영 돌아오지 않는다.
+     * 사용자는 쓰지도 않은 5,000원이 소진된 화면을 보고, 남은 한도를
+     * 실제보다 적게 알고 다른 카드를 꺼내게 된다.
+     */
+    if (isReversal(tx)) {
+      const link = links.get(tx.id);
+      if (!link) {
+        // 이번 달 안에 짝이 없다 — 지난달 결제를 이번 달에 취소한 경우다.
+        // 그 혜택은 지난달 한도에서 나갔으므로 이번 달 한도를 되돌리면
+        // 이번 달 소진량이 실제보다 작아진다. 건드리지 않는다.
+        noBenefit[tx.id] = { reason: '취소·환불', detail: '원거래를 못 찾아 회수 안 함' };
+        continue;
+      }
+
+      const origin = appliedByTx.get(link.originalId);
+      const rule = origin ? card.benefits.find((r) => r.id === origin.ruleId) : undefined;
+      if (!origin || !rule) {
+        // 원거래가 애초에 혜택을 못 받았다. 되돌릴 게 없다.
+        noBenefit[tx.id] = { reason: '취소·환불' };
+        continue;
+      }
+
+      const capKey = rule.capGroup ?? rule.id;
+      const used = monthlyUsed.get(capKey) ?? 0;
+      // 부분취소는 되감은 비율만큼만 회수한다.
+      const share = link.full
+        ? origin.netAmount
+        : Math.floor((origin.netAmount * link.amount) / link.originalAmount);
+      // 소진된 적 없는 한도를 되돌리면 음수가 된다. 실제로 태운 만큼까지만.
+      const refund = Math.max(0, Math.min(share, used, totalUsed));
+
+      monthlyUsed.set(capKey, used - refund);
+      totalUsed -= refund;
+
+      if (link.full) {
+        txCount.set(rule.id, Math.max(0, (txCount.get(rule.id) ?? 0) - 1));
+        const original = txById.get(link.originalId);
+        if (original) counters.release(rule, original);
+      }
+
+      if (refund === 0) noBenefit[tx.id] = { reason: '취소·환불', ruleLabel: rule.label };
+
+      // 음수 혜택으로 남긴다. 화면이 '−1,000원 회수'라고 말할 수 있어야
+      // 한도가 왜 줄었는지 사용자가 추적할 수 있다.
+      appliedBenefits.push({
+        transactionId: tx.id,
+        ruleId: rule.id,
+        ruleLabel: rule.label,
+        type: rule.type,
+        grossAmount: -refund,
+        netAmount: -refund,
+        cappedAmount: 0,
+        cappedBy: 'none',
+      });
+      continue;
+    }
+
     if (tx.canceled || tx.paymentKind === '취소·환불') {
       noBenefit[tx.id] = { reason: '취소·환불' };
       continue;
@@ -471,7 +560,7 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
     counters.record(rule, tx);
     totalUsed += amount;
 
-    appliedBenefits.push({
+    const applied: AppliedBenefit = {
       transactionId: tx.id,
       ruleId: rule.id,
       ruleLabel: rule.label,
@@ -480,7 +569,9 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
       netAmount: amount,
       cappedAmount: gross - amount,
       cappedBy,
-    });
+    };
+    appliedBenefits.push(applied);
+    appliedByTx.set(tx.id, applied);
   }
 
   const usage: BenefitUsage[] = card.benefits
