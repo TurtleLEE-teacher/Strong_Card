@@ -302,6 +302,13 @@ export default async function CardDetailPage({
                         −{won(benefit.netAmount)}
                       </p>
                     )}
+                    {/* 취소 전표가 되감은 혜택. 한도가 돌아왔다는 뜻이라
+                        나쁜 상태가 아니므로 경고색을 쓰지 않는다. */}
+                    {benefit && benefit.netAmount < 0 && (
+                      <p className="text-[11px] tabular" style={{ color: 'var(--text-muted)' }}>
+                        혜택 {won(-benefit.netAmount)} 회수
+                      </p>
+                    )}
                   </div>
                 </li>
               );

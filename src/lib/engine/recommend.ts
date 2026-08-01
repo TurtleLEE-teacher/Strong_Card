@@ -19,6 +19,7 @@ import type {
 } from '@/lib/types';
 import { resolveCap, selectRule, UsageCounters } from './benefits';
 import { judgeTransaction } from './performance';
+import { isReversal } from './reversal';
 import { percent } from '@/lib/format';
 
 export interface PurchaseQuery {
@@ -390,7 +391,9 @@ export function findMissedBenefits(
   const missed: MissedBenefit[] = [];
 
   for (const tx of transactions) {
-    if (!tx.cardId || tx.canceled) continue;
+    // 취소 전표(음수)는 '더 나은 카드'를 따질 결제가 아니다. 금액이 음수라
+    // 추천 엔진에 넣으면 혜택도 음수로 나와 엉뚱한 카드를 권하게 된다.
+    if (!tx.cardId || tx.canceled || isReversal(tx)) continue;
     const usedSnapshot = snapshotById.get(tx.cardId);
     const usedCard = cardById.get(tx.cardId);
     if (!usedSnapshot || !usedCard) continue;
