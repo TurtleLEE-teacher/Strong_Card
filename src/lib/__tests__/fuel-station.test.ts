@@ -16,8 +16,10 @@ import { describe, expect, it } from 'vitest';
 import {
   BRAND_ALIASES,
   MERCHANT_BRAND_OVERRIDES,
+  normalizeMerchant,
   resolveBrand,
 } from '@/config/merchants';
+import { applyMerchantBrands } from '@/lib/notion/transactions';
 import { CARDS_BY_ID } from '@/config/cards';
 import { buildSnapshot } from '@/lib/engine/snapshot';
 import { judgeTransaction } from '@/lib/engine/performance';
@@ -117,6 +119,58 @@ describe('주유 결제와 혜택·실적', () => {
     );
     const earned = snap.appliedBenefits.find((b) => b.ruleId === 'zero-essential');
     expect(earned?.netAmount).toBe(1_750); // 70,000 × 2.5%
+  });
+
+  it('노션에서 브랜드를 지정하면 그 결제에 혜택이 붙는다', () => {
+    const designated = {
+      ...tx('동서울주유소', 70_000, '2026-07-09', 'kb-tantandaero', '6089'),
+      brand: 'GS_CALTEX',
+      brandLabel: 'GS칼텍스',
+    };
+    const snap = buildSnapshot(
+      CARDS_BY_ID['kb-tantandaero'],
+      [tx('아무데나', 900_000, '2026-06-15', 'kb-tantandaero', '6089'), designated],
+      '2026-07',
+    );
+    expect(
+      snap.appliedBenefits.find((b) => b.ruleId === 'tt-daily-fuel')?.netAmount,
+    ).toBeGreaterThan(0);
+  });
+
+  it('노션 지정이 이름 사전을 이긴다', () => {
+    // 사전에는 GS칼텍스로 적혀 있어도, 폴이 바뀌었다면 사람 말이 맞다.
+    // 지정을 무시하면 사용자는 고칠 방법이 없어진다.
+    const corrected = {
+      ...tx('판교서일주유소', 70_000, '2026-07-09', 'kb-tantandaero', '6089'),
+      brand: 'S_OIL',
+      brandLabel: 'S-OIL',
+    };
+    const snap = buildSnapshot(
+      CARDS_BY_ID['kb-tantandaero'],
+      [tx('아무데나', 900_000, '2026-06-15', 'kb-tantandaero', '6089'), corrected],
+      '2026-07',
+    );
+    // 탄탄대로 주유는 SK·GS만 대상이다 → 할인 없음
+    expect(snap.appliedBenefits.find((b) => b.ruleId === 'tt-daily-fuel')).toBeUndefined();
+  });
+
+  it('한 번 지정하면 같은 가맹점의 다른 달 거래에도 붙는다', () => {
+    // 매달 같은 걸 다시 적게 만들면 아무도 안 쓴다.
+    const map = new Map([[normalizeMerchant('동서울주유소'), 'GS_CALTEX']]);
+    const [applied] = applyMerchantBrands(
+      [tx('동서울주유소', 55_000, '2026-08-03', 'kb-tantandaero', '6089')],
+      map,
+    );
+    expect(applied.brand).toBe('GS_CALTEX');
+  });
+
+  it('행에 직접 적은 지정이 사전보다 우선한다', () => {
+    const map = new Map([[normalizeMerchant('동서울주유소'), 'GS_CALTEX']]);
+    const row = {
+      ...tx('동서울주유소', 55_000, '2026-08-03', 'kb-tantandaero', '6089'),
+      brand: 'S_OIL',
+    };
+    expect(applyMerchantBrands([row], map)[0].brand).toBe('S_OIL');
   });
 
   it('주유 결제는 브랜드를 못 알아봐도 실적에는 그대로 들어간다', () => {

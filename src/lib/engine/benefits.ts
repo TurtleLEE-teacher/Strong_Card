@@ -114,7 +114,10 @@ export function matchesRule(rule: BenefitRule, tx: Transaction): boolean {
   }
 
   if (match.brands?.length) {
-    const brand = resolveBrand(tx.merchant ?? tx.title);
+    // 노션에서 사람이 지정한 브랜드가 이름 사전을 이긴다. 상호에 브랜드가
+    // 없는 가맹점(자영 주유소)은 거기 가 본 사람만 아는 사실이라, 이름을
+    // 다시 뜯어봐야 나올 게 없다.
+    const brand = tx.brand ?? resolveBrand(tx.merchant ?? tx.title);
     if (brand && match.brands.includes(brand)) return true;
   }
 

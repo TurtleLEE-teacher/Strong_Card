@@ -9,7 +9,7 @@ import { CardFace } from '@/components/CardFace';
 import { RefreshButton } from '@/components/RefreshButton';
 import { issuerLabel } from '@/config/issuers';
 import { VERDICT_LABELS } from '@/config/exclusions';
-import { resolveBrand } from '@/config/merchants';
+import { brandDisplayName, resolveBrand } from '@/config/merchants';
 import { guidesFor } from '@/lib/rule-guide';
 import { performanceSeverity } from '@/lib/severity';
 import { dateTimeShort, monthLabel, monthShort, won, wonShort } from '@/lib/format';
@@ -91,9 +91,13 @@ export default async function CardDetailPage({
     ...new Set(
       snapshot.unmatchedTransactionIds.flatMap((id) => {
         const tx = txById.get(id);
-        if (!tx) return [];
+        if (!tx || tx.brand) return [];
         const name = tx.merchant?.trim() || tx.title;
-        return resolveBrand(name) === null ? [name] : [];
+        if (resolveBrand(name) !== null) return [];
+        // 노션에 뭔가 적었는데 사전에 없는 이름이면 그 사실까지 말해 준다.
+        // 지정한 사람 입장에서 가장 헷갈리는 상태다 — 적었는데 아무 일도
+        // 일어나지 않는다.
+        return [tx.brandLabel ? `${name} (노션 '${tx.brandLabel}' 못 알아봄)` : name];
       }),
     ),
   ];
@@ -405,8 +409,9 @@ export default async function CardDetailPage({
           )}
           <p className="mt-2.5 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
             상호에 브랜드가 없는 곳(예: 자영 주유소)은 이름만으로는 어느 브랜드인지
-            알 수 없습니다. 아는 곳이 있으면 알려주세요 — 사전에 넣으면 다음 달부터
-            혜택이 붙습니다.
+            알 수 없습니다. 노션 거래 행의 <strong>브랜드</strong> 열에서 골라 주면
+            (예: GS칼텍스) 다음 새로고침부터 혜택 판정에 반영되고, 같은 가맹점의 다른
+            달 거래에도 함께 적용됩니다.
           </p>
         </Panel>
       )}
@@ -430,6 +435,9 @@ export default async function CardDetailPage({
                     <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                       {dateTimeShort(tx.approvedAt)}
                       {benefit && ` · ${benefit.ruleLabel}`}
+                      {/* 노션에서 지정한 브랜드로 걸린 건이라는 표시. 지정이
+                          먹었는지 확인할 데가 여기밖에 없다. */}
+                      {tx.brand && ` · 노션 지정 ${tx.brandLabel ?? brandDisplayName(tx.brand)}`}
                     </p>
                     {/*
                       혜택이 0원이면 **왜** 그런지 적는다. 이게 없으면

@@ -421,6 +421,14 @@ export function normalizeMerchant(raw: string): string {
 }
 
 /**
+ * 브랜드 키를 사람이 읽는 이름으로. 첫 별칭이 대표 표기다.
+ * 화면에 'GS_CALTEX'가 그대로 나가면 앱이 내부 사정을 떠드는 꼴이 된다.
+ */
+export function brandDisplayName(brand: string): string {
+  return BRAND_ALIASES[brand]?.[0] ?? brand;
+}
+
+/**
  * 정규화된 가맹점명에서 브랜드 키를 찾는다.
  * 완전일치 → 접두일치 → 부분일치 순으로 시도한다.
  * 못 찾으면 null (= 미분류).
