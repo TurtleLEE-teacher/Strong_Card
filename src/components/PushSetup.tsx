@@ -21,9 +21,22 @@ type Status =
   | 'on'
   | 'working';
 
+interface TestResult {
+  ok: boolean;
+  subscriptions?: number;
+  thisDeviceRegistered?: boolean | null;
+  sent?: number;
+  failed?: number;
+  failures?: { statusCode?: number; message: string }[];
+  hint?: string;
+  error?: string;
+}
+
 export function PushSetup({ vapidPublicKey }: { vapidPublicKey: string | null }) {
   const [status, setStatus] = useState<Status>('checking');
   const [error, setError] = useState<string | null>(null);
+  const [test, setTest] = useState<TestResult | null>(null);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -106,6 +119,34 @@ export function PushSetup({ vapidPublicKey }: { vapidPublicKey: string | null })
     }
   }
 
+  /**
+   * 지금 이 기기로 테스트 알림을 쏜다.
+   *
+   * 이 기기의 endpoint를 같이 보내야 서버가 "브라우저는 구독돼 있는데
+   * 서버 기록에는 없다"는 어긋남을 잡아낼 수 있다. 그 상태가 화면상
+   * '알림을 받습니다'로 보이면서 실제로는 아무것도 안 오는 원인이다.
+   */
+  async function sendTest() {
+    setTesting(true);
+    setTest(null);
+
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      const subscription = await registration?.pushManager.getSubscription();
+
+      const response = await fetch('/api/push/test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ endpoint: subscription?.endpoint }),
+      });
+      setTest(await response.json());
+    } catch (e) {
+      setTest({ ok: false, error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   async function disable() {
     setStatus('working');
     setError(null);
@@ -175,10 +216,21 @@ export function PushSetup({ vapidPublicKey }: { vapidPublicKey: string | null })
       )}
 
       {status === 'on' && (
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs font-medium" style={{ color: 'var(--status-good)' }}>
             ● 이 기기로 알림을 받습니다
           </span>
+          {/* 이 버튼이 없으면 "알림이 안 와요"에 아무 답도 못 한다.
+              사슬 네 토막 중 어디가 끊겼는지는 실제로 쏴 봐야 안다. */}
+          <button
+            type="button"
+            onClick={sendTest}
+            disabled={testing}
+            className="rounded-lg px-2.5 py-1 text-xs disabled:opacity-50"
+            style={{ background: 'var(--surface-alt)', color: 'var(--text-secondary)' }}
+          >
+            {testing ? '보내는 중…' : '테스트 알림 보내기'}
+          </button>
           <button
             type="button"
             onClick={disable}
@@ -190,9 +242,58 @@ export function PushSetup({ vapidPublicKey }: { vapidPublicKey: string | null })
         </div>
       )}
 
+      {test && <TestReport result={test} />}
+
       {error && (
         <p className="mt-2 text-xs" style={{ color: 'var(--status-critical)' }}>
           {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 테스트 결과를 사슬 순서대로 보여준다.
+ *
+ * "실패"만 적으면 사용자가 할 수 있는 일이 없다. 등록된 기기 수와
+ * 푸시 서비스의 응답 코드까지 드러내야 다음 행동이 정해진다.
+ */
+function TestReport({ result }: { result: TestResult }) {
+  if (result.error) {
+    return (
+      <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--status-critical)' }}>
+        오류: {result.error}
+      </p>
+    );
+  }
+
+  return (
+    <div
+      className="mt-3 rounded-lg px-3 py-2.5 text-xs leading-relaxed"
+      style={{ background: 'var(--surface-alt)', color: 'var(--text-secondary)' }}
+    >
+      <p style={{ color: result.ok ? 'var(--status-good)' : 'var(--status-serious)' }}>
+        {result.ok ? '● 발송 성공' : '● 발송되지 않음'}
+      </p>
+      <ul className="mt-1.5 space-y-0.5">
+        <li>서버에 등록된 기기 {result.subscriptions ?? 0}대</li>
+        {result.thisDeviceRegistered !== null && result.thisDeviceRegistered !== undefined && (
+          <li>이 기기 등록 여부: {result.thisDeviceRegistered ? '있음' : '없음'}</li>
+        )}
+        <li>
+          발송 성공 {result.sent ?? 0} · 실패 {result.failed ?? 0}
+        </li>
+      </ul>
+      {result.failures?.map((f, i) => (
+        <p key={i} className="mt-1" style={{ color: 'var(--status-serious)' }}>
+          {f.statusCode ? `[${f.statusCode}] ` : ''}
+          {f.message}
+        </p>
+      ))}
+      {result.hint && (
+        <p className="mt-1.5" style={{ color: 'var(--text-primary)' }}>
+          {result.hint}
         </p>
       )}
     </div>

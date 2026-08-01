@@ -43,10 +43,23 @@ export interface PushPayload {
   tag: string;
 }
 
+/** 발송이 실패한 기기 하나 */
+export interface SendFailure {
+  device: string | null;
+  /** 푸시 서비스가 준 HTTP 상태. 410이면 구독이 죽은 것. */
+  statusCode?: number;
+  message: string;
+}
+
 export interface SendResult {
   sent: number;
   failed: number;
   deactivated: number;
+  /**
+   * 실패 사유. 예전에는 세기만 하고 버렸는데, 그러면 "알림이 안 와요"에
+   * 아무 답도 못 한다. 진단 화면이 쓸 수 있게 남긴다.
+   */
+  failures: SendFailure[];
 }
 
 /** 알림 하나를 모든 활성 기기에 보낸다. */
@@ -71,6 +84,7 @@ export async function sendToSubscriptions(
   let sent = 0;
   let failed = 0;
   let deactivated = 0;
+  const failures: SendFailure[] = [];
 
   await Promise.all(
     subscriptions.map(async (sub) => {
@@ -85,6 +99,11 @@ export async function sendToSubscriptions(
         failed += 1;
         // 404/410은 구독이 영구히 죽었다는 뜻이다. 재시도해도 소용없다.
         const statusCode = (e as { statusCode?: number }).statusCode;
+        failures.push({
+          device: sub.device,
+          statusCode,
+          message: e instanceof Error ? e.message : String(e),
+        });
         if (statusCode === 404 || statusCode === 410) {
           await deactivateSubscription(sub.pageId);
           deactivated += 1;
@@ -93,5 +112,5 @@ export async function sendToSubscriptions(
     }),
   );
 
-  return { sent, failed, deactivated };
+  return { sent, failed, deactivated, failures };
 }

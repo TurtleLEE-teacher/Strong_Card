@@ -26,18 +26,25 @@ self.addEventListener('push', (event) => {
     payload = { title: 'Strong Card', body: event.data.text(), url: '/' };
   }
 
-  event.waitUntil(
-    self.registration.showNotification(payload.title ?? 'Strong Card', {
-      body: payload.body ?? '',
-      icon: '/icon-192.png',
-      badge: '/badge-72.png',
-      // 같은 태그는 서로를 대체한다. 실적 경고가 D-7·D-3·D-1로
-      // 세 번 쌓이지 않도록.
-      tag: payload.tag,
-      renotify: true,
-      data: { url: payload.url ?? '/' },
-    }),
-  );
+  const options = {
+    body: payload.body ?? '',
+    icon: '/icon-192.png',
+    badge: '/badge-72.png',
+    data: { url: payload.url ?? '/' },
+  };
+
+  // 같은 태그는 서로를 대체한다. 실적 경고가 D-7·D-3·D-1로 세 번
+  // 쌓이지 않도록.
+  //
+  // renotify는 **tag가 있을 때만** 붙인다. tag 없이 renotify를 주면
+  // showNotification이 TypeError로 죽고, 알림은 조용히 사라진다 —
+  // 폰에서는 '안 왔다'와 구분이 안 된다.
+  if (payload.tag) {
+    options.tag = payload.tag;
+    options.renotify = true;
+  }
+
+  event.waitUntil(self.registration.showNotification(payload.title ?? 'Strong Card', options));
 });
 
 self.addEventListener('notificationclick', (event) => {
