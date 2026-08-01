@@ -35,6 +35,7 @@ function tx(cardId: CardId, title: string, krwAmount: number, day: string): Tran
 
 const tantan = CARDS_BY_ID['kb-tantandaero'];
 const zero = CARDS_BY_ID['hyundai-zero-ed2'];
+const ev = CARDS_BY_ID['shinhan-ev'];
 const AT = '2026-07-15T03:00:00Z';
 
 describe('카드별 예상 혜택', () => {
@@ -290,6 +291,41 @@ describe('실적 영향 안내', () => {
       at: AT,
     });
     expect(result.performanceNote).toBeNull();
+    expect(result.performanceImpact).toBe('none');
+  });
+
+  it('혜택은 나오지만 실적에는 안 잡히는 결제를 「구간 달성」이라고 하지 않는다', () => {
+    // 하이패스는 무승인 전표라 실적에서 빠진다. 캐시백은 나온다.
+    // 실적 29만 → 30만 구간까지 1만원 남은 상태에서 5만원을 결제해도
+    // 실적은 29만 그대로다. 예전에는 여기서 "구간 달성"이라고 말했다.
+    const snapshot = buildSnapshot(
+      ev,
+      [tx('shinhan-ev', 'A', 300_000, '06-15'), tx('shinhan-ev', 'B', 290_000, '07-01')],
+      '2026-07',
+    );
+    const result = estimateBenefit(ev, snapshot, {
+      merchant: '한국도로공사하이패스',
+      amount: 50_000,
+      at: AT,
+    });
+    expect(result.expectedBenefit).toBeGreaterThan(0); // 캐시백은 받는다
+    expect(result.performanceImpact).toBe('excluded');
+    expect(result.performanceNote).toContain('실적에는 안 잡힙니다');
+    expect(result.performanceNote).not.toContain('구간 달성');
+  });
+
+  it('혜택도 실적도 없는 제외 항목은 같은 말을 두 번 하지 않는다', () => {
+    // 편의점에서 상품권을 사면 편의점 할인 룰에는 걸리지만 상품권이라 제외된다.
+    const snapshot = buildSnapshot(ev, [tx('shinhan-ev', 'A', 300_000, '06-15')], '2026-07');
+    const result = estimateBenefit(ev, snapshot, {
+      merchant: 'GS25 역삼점 문화상품권',
+      amount: 50_000,
+      at: AT,
+    });
+    // 사유 줄이 이미 설명했으므로 실적 줄은 비운다
+    expect(result.reason).toContain('상품권');
+    expect(result.performanceNote).toBeNull();
+    expect(result.performanceImpact).toBe('excluded');
   });
 });
 

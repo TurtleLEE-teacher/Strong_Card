@@ -14,11 +14,12 @@ import type {
   Card,
   CardId,
   CardMonthlySnapshot,
+  PerformanceVerdict,
   Transaction,
   TxCategory,
 } from '@/lib/types';
 import { resolveCap, selectRule, UsageCounters } from './benefits';
-import { judgeTransaction } from './performance';
+import { excludesSpendFromPerformance, judgeTransaction } from './performance';
 import { isReversal } from './reversal';
 import { percent } from '@/lib/format';
 
@@ -58,6 +59,18 @@ export interface Recommendation {
    * 다음 달 혜택이 걸린 문제라 당장의 할인액만큼 중요할 수 있다.
    */
   performanceNote: string | null;
+  /**
+   * 이 결제가 **이 카드의 실적에 잡히는지.**
+   *
+   * 'counts'   산입된다
+   * 'excluded' 안 잡힌다 — 제외 항목(세금·상품권·무승인)이거나, 이 할인을
+   *            받는 순간 매출 전체가 빠지는 혜택(탄탄대로 Trendy)이거나
+   * 'none'     실적 조건이 없는 카드라 따질 게 없다
+   *
+   * performanceNote의 색과 정렬 순서가 이 값에 달려 있다. 안 잡히는 결제를
+   * 'counts'로 두면 화면이 초록색으로 "구간 달성"이라고 거짓말한다.
+   */
+  performanceImpact: 'counts' | 'excluded' | 'none';
 }
 
 /**
@@ -159,7 +172,7 @@ export function estimateBenefit(
   const counters = restoreCounters(card, snapshot);
   const rule = selectRule(card, pseudo, snapshot.appliedTier, counters);
 
-  const base: Omit<Recommendation, 'reason' | 'performanceNote'> = {
+  const base: Omit<Recommendation, 'reason' | 'performanceNote' | 'performanceImpact'> = {
     cardId: card.id,
     cardName: card.shortName,
     slot: card.slot,
@@ -173,7 +186,23 @@ export function estimateBenefit(
     effectiveRate: 0,
   };
 
-  const performanceNote = describePerformanceImpact(card, snapshot, query.amount);
+  // 세금·상품권 같은 제외 항목인지 먼저 판정한다. 혜택 안내와 실적 안내가
+  // 같은 판정을 봐야 두 줄이 서로 다른 말을 하지 않는다.
+  const verdict = judgeTransaction(card, pseudo);
+
+  /**
+   * 실적 안내를 만든다.
+   *
+   * 받을 혜택액을 인자로 받는 이유: 탄탄대로 Trendy는 **할인을 실제로 받은
+   * 이용건**만 실적에서 빠진다. 한도가 소진돼 0원이면 실적에는 그대로 잡히므로,
+   * 금액을 모르고는 어느 쪽인지 말할 수 없다.
+   */
+  const performance = (benefit: number) =>
+    describePerformanceImpact(card, snapshot, query.amount, {
+      verdict,
+      benefitedExclusion:
+        rule !== null && benefit > 0 && excludesSpendFromPerformance(card, rule),
+    });
 
   // 구간이 0인 이유가 '미달'인지 '몰라서'인지 구분한다.
   // 지난달 거래가 없으면 실적을 계산할 수 없을 뿐, 실제 카드는 혜택을
@@ -189,7 +218,7 @@ export function estimateBenefit(
     return {
       ...base,
       reason: noTier ? noTierReason : '이 가맹점에 적용되는 혜택이 없습니다',
-      performanceNote,
+      ...performance(0),
     };
   }
 
@@ -197,18 +226,19 @@ export function estimateBenefit(
   // 이 검사가 없으면 "통합 한도를 이미 다 썼습니다"로 나온다 — 한도 계산상
   // 틀린 말은 아니지만, 사용자가 해야 할 일(실적 채우기 / 실적 입력)을 가린다.
   if (noTier) {
-    return { ...base, reason: noTierReason, performanceNote };
+    return { ...base, reason: noTierReason, ...performance(0) };
   }
 
   // 세금·상품권 같은 제외 항목에는 혜택이 붙지 않는다.
   // 이 검사를 빼먹으면 catch-all 룰(쿠팡와우 그 외 1.2%, ZERO 전 가맹점 1%)이
   // 지방세 결제에 달라붙어 "세금은 쿠팡와우로!"라고 권하게 된다.
-  const verdict = judgeTransaction(card, pseudo);
   if (verdict !== '인정' && !rule.applyToExcludedSpend) {
     return {
       ...base,
       reason: `${verdict.replace('제외-', '')} 항목이라 혜택 대상이 아닙니다`,
-      // 실적에도 안 잡히므로 실적 안내를 띄우면 거짓말이 된다.
+      ...performance(0),
+      // 실적 줄은 비운다. 바로 윗줄이 이미 제외 항목이라고 말했으므로
+      // 같은 이유를 두 번 쓰게 된다.
       performanceNote: null,
     };
   }
@@ -248,7 +278,7 @@ export function estimateBenefit(
     cappedBy,
     effectiveRate: query.amount > 0 ? amount / query.amount : 0,
     reason: describeReason(rule, cappedBy, ruleRemaining, totalRemaining),
-    performanceNote,
+    ...performance(amount),
   };
 }
 
@@ -296,35 +326,77 @@ function describeReason(
  * 당장의 할인액이 작아도 다음 구간을 넘길 수 있다면 그게 더 큰 이득일 수
  * 있다. 숫자로 합산하지는 않는다 — 다음 달에 실제로 그 혜택을 쓸지는
  * 알 수 없으므로, 판단 재료만 제공한다.
+ *
+ * **먼저 이 결제가 실적에 잡히기는 하는지부터 따진다.** 예전에는 금액만 보고
+ * "이 결제로 40만원 구간 달성"이라고 했는데, 그 결제가 세금이거나 하이패스면
+ * (applyToExcludedSpend 룰) 실적에는 1원도 안 잡힌다. 탄탄대로 Trendy는 더
+ * 나쁘다 — 할인을 받는 바로 그 이유로 매출 전체가 실적에서 빠지므로,
+ * 원래 문구는 사실을 정확히 거꾸로 말하고 있었다.
  */
 function describePerformanceImpact(
   card: Card,
   snapshot: CardMonthlySnapshot,
   amount: number,
-): string | null {
-  if (!card.performance.required || !snapshot.nextTier) return null;
+  context: { verdict: PerformanceVerdict; benefitedExclusion: boolean },
+): Pick<Recommendation, 'performanceNote' | 'performanceImpact'> {
+  // 무실적 카드는 실적이라는 개념 자체가 없다.
+  if (!card.performance.required) {
+    return { performanceNote: null, performanceImpact: 'none' };
+  }
+
+  // 할인을 받는 순간 매출 전체가 실적에서 빠지는 혜택 (탄탄대로 Trendy).
+  // 20% 할인보다 40만 구간을 놓치는 손해가 더 클 수 있어 반드시 알려야 한다.
+  if (context.benefitedExclusion) {
+    return {
+      performanceNote: `이 할인을 받으면 결제액 전체가 실적에서 빠집니다${remainingTail(snapshot)}`,
+      performanceImpact: 'excluded',
+    };
+  }
+
+  if (context.verdict !== '인정') {
+    return {
+      performanceNote: `${context.verdict.replace('제외-', '')} 항목이라 이 카드 실적에는 안 잡힙니다`,
+      performanceImpact: 'excluded',
+    };
+  }
+
+  if (!snapshot.nextTier) return { performanceNote: null, performanceImpact: 'counts' };
 
   const remaining = snapshot.remainingToNextTier;
   if (amount >= remaining) {
     const cap = snapshot.nextTier.totalBenefitCap;
-    return cap === null
-      ? `이 결제로 ${snapshot.nextTier.label} 구간 달성`
-      : `이 결제로 ${snapshot.nextTier.label} 구간 달성 → 다음 달 한도 ${cap.toLocaleString('ko-KR')}원`;
+    return {
+      performanceNote:
+        cap === null
+          ? `이 결제로 ${snapshot.nextTier.label} 구간 달성`
+          : `이 결제로 ${snapshot.nextTier.label} 구간 달성 → 다음 달 한도 ${cap.toLocaleString('ko-KR')}원`,
+      performanceImpact: 'counts',
+    };
   }
 
   // 근접했을 때만 알린다. 100만원 남은 상황에서 "94만원 남음"은 정보가 아니다.
   if (remaining - amount <= 100_000) {
-    return `이 결제 후 ${snapshot.nextTier.label} 구간까지 ${(remaining - amount).toLocaleString('ko-KR')}원`;
+    return {
+      performanceNote: `이 결제 후 ${snapshot.nextTier.label} 구간까지 ${(remaining - amount).toLocaleString('ko-KR')}원`,
+      performanceImpact: 'counts',
+    };
   }
 
-  return null;
+  return { performanceNote: null, performanceImpact: 'counts' };
+}
+
+/** "…빠집니다 (40만원 구간까지 120,000원 그대로)" — 손해의 크기를 숫자로 보여준다. */
+function remainingTail(snapshot: CardMonthlySnapshot): string {
+  if (!snapshot.nextTier) return '';
+  return ` (${snapshot.nextTier.label} 구간까지 ${snapshot.remainingToNextTier.toLocaleString('ko-KR')}원 그대로)`;
 }
 
 /**
  * 모든 활성 카드를 예상 혜택 내림차순으로 정렬한다.
  *
- * 동점이면 실적 영향이 있는 카드를 앞세운다 — 같은 값이면 실적을
- * 채우는 쪽이 낫다.
+ * 동점이면 **실적을 채워 주는** 카드를 앞세운다 — 같은 값이면 구간에
+ * 가까워지는 쪽이 낫다. 안내 문구가 있다고 다 좋은 소식이 아니므로
+ * (실적에서 빠진다는 경고도 문구다) impact까지 함께 본다.
  */
 export function recommendCards(
   cards: Card[],
@@ -343,9 +415,9 @@ export function recommendCards(
       if (b.expectedBenefit !== a.expectedBenefit) {
         return b.expectedBenefit - a.expectedBenefit;
       }
-      const aHasNote = a.performanceNote ? 1 : 0;
-      const bHasNote = b.performanceNote ? 1 : 0;
-      return bHasNote - aHasNote;
+      const builds = (r: Recommendation) =>
+        r.performanceImpact === 'counts' && r.performanceNote ? 1 : 0;
+      return builds(b) - builds(a);
     });
 }
 

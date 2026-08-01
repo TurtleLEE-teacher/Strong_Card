@@ -19,6 +19,7 @@ import { monthRangeUtc, previousMonthKey, toMonthKey, type MonthKey } from '@/li
 import {
   type PerformanceResult,
   computePerformance,
+  excludesSpendFromPerformance,
   remainingToNextTier,
   resolveNextTier,
   resolveTier,
@@ -92,13 +93,13 @@ function adjustedPerformance(
     month,
   });
 
-  const targets = new Set(groups);
   const excluded = new Set(
     benefits.appliedBenefits
+      // 할인이 0원이면 '혜택을 받은 이용건'이 아니다 — 실적에서 뺄 이유가 없다.
       .filter((b) => b.netAmount > 0)
       .filter((b) => {
         const rule = card.benefits.find((r) => r.id === b.ruleId);
-        return targets.has(b.ruleId) || (rule?.capGroup ? targets.has(rule.capGroup) : false);
+        return rule ? excludesSpendFromPerformance(card, rule) : false;
       })
       .map((b) => b.transactionId),
   );
@@ -107,7 +108,7 @@ function adjustedPerformance(
   return {
     result: computePerformance(card, transactions, {
       forceExclude: excluded,
-      forceExcludeVerdict: '제외-기타',
+      forceExcludeVerdict: '제외-혜택',
     }),
     baseVerdicts: first.verdicts,
   };
@@ -177,6 +178,8 @@ export function buildSnapshot(
     currentSpend: perf.includedSpend,
     excludedSpend: perf.excludedSpend,
     exclusions: perf.exclusions,
+    // 보정 **후** 판정이다. 노션 역기입이 이 값을 쓴다.
+    performanceVerdicts: Object.fromEntries(perf.verdicts),
     reachedTier,
     nextTier,
     remainingToNextTier: remainingToNextTier(card, perf.includedSpend),

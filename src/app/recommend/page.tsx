@@ -167,8 +167,17 @@ export default async function RecommendPage({
                 </p>
               )}
               {best.performanceNote && (
-                <p className="mt-2 text-xs font-medium" style={{ color: 'var(--status-good)' }}>
-                  ↑ {best.performanceNote}
+                <p
+                  className="mt-2 text-xs font-medium"
+                  style={{
+                    color:
+                      best.performanceImpact === 'excluded'
+                        ? 'var(--status-serious)'
+                        : 'var(--status-good)',
+                  }}
+                >
+                  {best.performanceImpact === 'excluded' ? '⚠ ' : '↑ '}
+                  {best.performanceNote}
                 </p>
               )}
             </div>
@@ -221,7 +230,15 @@ export default async function RecommendPage({
                       </p>
                     )}
                     {r.performanceNote && (
-                      <p className="text-[11px]" style={{ color: 'var(--status-good)' }}>
+                      <p
+                        className="text-[11px]"
+                        style={{
+                          color:
+                            r.performanceImpact === 'excluded'
+                              ? 'var(--status-serious)'
+                              : 'var(--status-good)',
+                        }}
+                      >
                         {r.performanceNote}
                       </p>
                     )}
