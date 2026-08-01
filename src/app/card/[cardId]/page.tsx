@@ -9,6 +9,7 @@ import { CardFace } from '@/components/CardFace';
 import { RefreshButton } from '@/components/RefreshButton';
 import { issuerLabel } from '@/config/issuers';
 import { VERDICT_LABELS } from '@/config/exclusions';
+import { resolveBrand } from '@/config/merchants';
 import { guidesFor } from '@/lib/rule-guide';
 import { performanceSeverity } from '@/lib/severity';
 import { dateTimeShort, monthLabel, monthShort, won, wonShort } from '@/lib/format';
@@ -74,6 +75,29 @@ export default async function CardDetailPage({
       return tx ? [{ benefit, tx }] : [];
     })
     .sort((a, b) => b.benefit.netAmount - a.benefit.netAmount);
+  /*
+   * 브랜드를 모르는 채로 혜택도 못 받은 가맹점.
+   *
+   * 두 조건을 **모두** 봐야 신호가 된다. 룰에 안 걸린 것만 모으면 쿠팡와우
+   * 처럼 대상이 좁은 카드에서 이번 달 결제 대부분이 올라오고, 브랜드를 모르는
+   * 것만 모으면 동네 가게가 끝없이 쌓인다. 겹치는 자리가 "사전에 넣어 두면
+   * 다음 달부터 혜택이 붙었을 곳"이다.
+   *
+   * 이 목록이 없으면 '판교서일주유소'(GS칼텍스 폴인데 이름에 GS가 없다) 같은
+   * 가맹점은 사용자가 거래 목록을 눈으로 훑다 우연히 발견하기 전까지 매달
+   * 조용히 혜택을 놓친다.
+   */
+  const unknownMerchants = [
+    ...new Set(
+      snapshot.unmatchedTransactionIds.flatMap((id) => {
+        const tx = txById.get(id);
+        if (!tx) return [];
+        const name = tx.merchant?.trim() || tx.title;
+        return resolveBrand(name) === null ? [name] : [];
+      }),
+    ),
+  ];
+
   const contributionsFor = (usage: (typeof snapshot.benefitUsage)[number]): UsageContribution[] => {
     const ruleIds = usage.capGroup
       ? new Set(card.benefits.filter((r) => r.capGroup === usage.capGroup).map((r) => r.id))
@@ -354,6 +378,35 @@ export default async function CardDetailPage({
           </div>
           <p className="mt-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
             차이가 크면 환율이 아니라 실적 제외 규칙을 먼저 의심하세요.
+          </p>
+        </Panel>
+      )}
+
+      {unknownMerchants.length > 0 && (
+        <Panel
+          title={`이름만으로 못 알아본 가맹점 ${unknownMerchants.length}곳`}
+          subtitle="혜택 판정에서만 빠집니다 — 실적 금액에는 그대로 들어갑니다"
+        >
+          <ul className="flex flex-wrap gap-1.5">
+            {unknownMerchants.slice(0, 12).map((name) => (
+              <li
+                key={name}
+                className="rounded-full border px-2.5 py-1 text-[11px]"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+              >
+                {name}
+              </li>
+            ))}
+          </ul>
+          {unknownMerchants.length > 12 && (
+            <p className="mt-2 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              외 {unknownMerchants.length - 12}곳
+            </p>
+          )}
+          <p className="mt-2.5 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+            상호에 브랜드가 없는 곳(예: 자영 주유소)은 이름만으로는 어느 브랜드인지
+            알 수 없습니다. 아는 곳이 있으면 알려주세요 — 사전에 넣으면 다음 달부터
+            혜택이 붙습니다.
           </p>
         </Panel>
       )}
