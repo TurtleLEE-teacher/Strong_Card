@@ -26,16 +26,38 @@ import { COMMON_EXCLUSIONS } from '../exclusions';
  *                영역별 일 1회 월 5회, 할인 전 이용금액 1회 5만원까지
  *   Monthly Plan 공과금 10% / 디지털구독·멤버십 20% / 영화예매 5천원(월 1회)
  *
- * Plan Day  매월 1일, Time Plan·Daily Plan **각 서비스의 첫 할인 거래 1건**에
- *           할인율 2배 (서비스당 1회, 최대 2회). 기존 월 한도와 일/월 횟수
- *           한도 안에서 제공되며, 승인 시각 기준 1일 23:59:59까지.
+ * ── Plan Day (매월 1일) ────────────────────────────────────────────────
  *
- *           약관이 "할인 전 이용금액 1회 N원까지"로 쓰여 있어 건당 상한을
- *           할인액(capPerTx)이 아니라 이용금액(maxEligibleAmountPerTx)에 건다.
- *           평상시 결과는 같지만(1만원 × 10% = 1,000원), Plan Day로 요율이
- *           2배가 되면 할인액 상한도 2배가 되어야 약관과 맞는다.
+ * 약관 원문:
+ *   "매월 1일 Time Plan 서비스, Daily Plan 서비스 첫 번째 할인 거래에
+ *    할인율 2배 적용 (서비스당 1회)"
+ *   "Time Plan 서비스, Daily Plan 서비스 각 1회(최대 2회) 적용되며,
+ *    각 서비스 대상 거래 중 승인 순서 기준으로 첫 번째 거래에 적용"
+ *   "Plan Day 서비스는 승인 시간 기준으로 매월 1일 23시 59분 59초까지 제공"
+ *   "**Daily Plan 서비스의 해외 영역에는 Plan Day 서비스가 적용되지 않습니다**"
+ *   "Plan Day 서비스는 Time Plan 서비스, Daily Plan 서비스의 월 통합 할인
+ *    한도 및 일/월 횟수 한도 내에서 제공"
  *
- * 출처: 신한카드 공식 상품 안내 (사용자 제공 전문)
+ * **Plan Day에 별도 한도는 없다.** 2배가 되는 것은 요율뿐이고, 결과는 기존
+ * 월 통합 한도 안에서만 나온다. 그래서 실제로 더 받는 금액은 이렇게 정해진다.
+ *
+ *   서비스                평소 최대   Plan Day 최대
+ *   ──────────────────────────────────────────────
+ *   Time Plan 10%         1,000원      2,000원   (이용금액 1만원 상한)
+ *   Daily 쇼핑 10%        5,000원     10,000원   (이용금액 5만원 상한)
+ *   Daily 이동·생활 5%    2,500원      5,000원   (이용금액 5만원 상한)
+ *
+ * 40만 구간이면 Daily Plan 월 한도가 통째로 10,000원이다 — Plan Day에
+ * 마트에서 5만원을 긁으면 그 한 건으로 한 달치 Daily 한도가 끝난다.
+ *
+ * Monthly Plan(공과금·구독·영화)에는 Plan Day가 없다.
+ *
+ * 약관이 "할인 전 이용금액 1회 N원까지"로 쓰여 있어 건당 상한을
+ * 할인액(capPerTx)이 아니라 이용금액(maxEligibleAmountPerTx)에 건다.
+ * 평상시 결과는 같지만(1만원 × 10% = 1,000원), Plan Day로 요율이
+ * 2배가 되면 할인액 상한도 2배가 되어야 약관과 맞는다.
+ *
+ * 출처: 신한카드 공식 상품 안내 (사용자 제공 전문 + 2026-08 약관 재확인)
  * https://www.shinhancard.com/pconts/html/card/apply/credit/1232369_2207.html
  */
 
@@ -71,6 +93,11 @@ const CINEMA_CAP: TierCap[] = [
 /**
  * Plan Day — 매월 1일 요율 2배. capGroup(=서비스)마다 첫 할인 거래 1건에만
  * 붙으므로 Time Plan·Daily Plan 각 1회씩, 월 최대 2회 적용된다.
+ *
+ * **해외(dp-daily-overseas)에는 붙이지 않는다.** 약관이 그 영역만 콕
+ * 집어 제외한다. Daily Plan의 다른 영역과 나란히 놓여 있어 무심코 같이
+ * 붙이기 쉬운데, 그러면 8월 1일 해외 결제 한 건이 Daily 한도를 두 배로
+ * 태우는 것으로 잘못 계산된다.
  */
 const PLAN_DAY = { dayOfMonth: 1, multiplier: 2 } as const;
 
@@ -307,7 +334,8 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       // 해외 일시불만. 할부 전환분은 제외된다.
       match: { paymentKinds: ['해외'] },
       maxEligibleAmountPerTx: 50_000,
-      bonusDay: PLAN_DAY,
+      // Plan Day 없음 — 약관: "Daily Plan 서비스의 해외 영역에는
+      // Plan Day 서비스가 적용되지 않습니다"
       capPerMonth: DAILY_PLAN_CAP,
       capGroup: DAILY,
       capGroupLabel: 'Daily Plan (쇼핑 10% · 이동/생활 5%)',
@@ -315,7 +343,7 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       maxCountPerMonth: 5,
       priority: 30,
       confidence: 'confirmed',
-      notes: 'Mastercard 해외겸용 카드만. 원화 청구금액 기준',
+      notes: 'Mastercard 해외겸용 카드만. 원화 청구금액 기준. Plan Day 제외 영역',
     },
     {
       id: 'dp-daily-medical',

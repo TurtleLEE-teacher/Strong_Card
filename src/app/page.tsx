@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { CARDS_BY_ID } from '@/config/cards';
 import { CardWidget } from '@/components/CardWidget';
+import { RefreshButton } from '@/components/RefreshButton';
 import { getDashboardData } from '@/lib/data';
 import { monthLabel, monthShort, won } from '@/lib/format';
 
 export const revalidate = 300; // Notion API 3req/s 제한 회피
 
 export default async function DashboardPage() {
-  const { month, snapshots, unmapped, daysRemaining, isDemo, error } =
+  const { month, snapshots, unmapped, daysRemaining, fetchedAt, isDemo, error } =
     await getDashboardData();
 
   const totalBenefit = snapshots.reduce((sum, s) => sum + s.totalBenefitUsed, 0);
@@ -35,10 +36,12 @@ export default async function DashboardPage() {
           <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
             {monthLabel(month)}
           </h1>
-          <div className="flex items-baseline gap-3">
+          <div className="flex items-center gap-2">
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
               {daysRemaining === 0 ? '오늘이 말일' : `${daysRemaining}일 남음`}
             </p>
+            {/* 결제 직후에 여는 앱이다. 새로고침은 설정보다 손에 가까워야 한다. */}
+            <RefreshButton fetchedAt={fetchedAt} />
             <Link
               href="/settings"
               className="text-xs hover:underline"

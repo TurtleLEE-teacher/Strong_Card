@@ -6,6 +6,7 @@ import { getDashboardData } from '@/lib/data';
 import { Meter } from '@/components/Meter';
 import { UsageRow, type UsageContribution } from '@/components/UsageRow';
 import { CardFace } from '@/components/CardFace';
+import { RefreshButton } from '@/components/RefreshButton';
 import { issuerLabel } from '@/config/issuers';
 import { guidesFor } from '@/lib/rule-guide';
 import { performanceSeverity } from '@/lib/severity';
@@ -28,7 +29,8 @@ export default async function CardDetailPage({
   const card = CARDS_BY_ID[cardId as CardId];
   if (!card) notFound();
 
-  const { month, snapshots, transactions, daysRemaining } = await getDashboardData();
+  const { month, snapshots, transactions, daysRemaining, fetchedAt } =
+    await getDashboardData();
   const snapshot = snapshots.find((s) => s.cardId === card.id);
   if (!snapshot) notFound();
 
@@ -99,13 +101,14 @@ export default async function CardDetailPage({
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-6 pb-16 sm:px-6">
-      <Link
-        href="/"
-        className="mb-5 inline-block text-xs"
-        style={{ color: 'var(--text-muted)' }}
-      >
-        ← 대시보드
-      </Link>
+      {/* 상세에서도 새로고침이 닿아야 한다 — 방금 긁은 카드를 열어 놓고
+          대시보드로 나갔다 오게 만들 이유가 없다. */}
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <Link href="/" className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          ← 대시보드
+        </Link>
+        <RefreshButton fetchedAt={fetchedAt} />
+      </div>
 
       <header className="mb-6 flex items-start gap-3">
         <span className="mt-0.5">
