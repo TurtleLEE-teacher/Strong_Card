@@ -101,6 +101,18 @@ const CINEMA_CAP: TierCap[] = [
  */
 const PLAN_DAY = { dayOfMonth: 1, multiplier: 2 } as const;
 
+/**
+ * 배달앱 주문을 카페·음식점·편의점 영역에서 걷어낸다.
+ *
+ * 약관: "배달앱으로 카페/음식점/편의점 주문 시에는 카페/음식점/편의점
+ * 할인이 적용되지 않습니다."
+ *
+ * 배달앱 영역은 18~22시에만 열린다. 그런데 낮 1시에 배달의민족으로
+ * 주문하면 배달앱 룰은 시간대에서 떨어지고, 그 다음 음식점 룰이
+ * 카테고리('식비') 폴백으로 걸려 할인을 줬다. 약관이 금지한 자리다.
+ */
+const DELIVERY_APPS = ['배달의민족', '배민', '요기요', '쿠팡이츠', '땡겨요'];
+
 const TIME = 'dp-time';
 const DAILY = 'dp-daily';
 const RECURRING = 'dp-recurring';
@@ -161,7 +173,7 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       type: 'discount',
       rate: 0.1,
       // 지정 6개 브랜드만. 일반 카페 브랜드를 넣으면 과다 계상된다.
-      match: { brands: [...BRAND_GROUPS.DP_CAFE] },
+      match: { brands: [...BRAND_GROUPS.DP_CAFE], excludeKeywords: DELIVERY_APPS },
       timeWindow: { startHour: 7, endHour: 15, label: '07~15시' },
       maxEligibleAmountPerTx: 10_000,
       bonusDay: PLAN_DAY,
@@ -178,7 +190,14 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       label: '음식점 10% (07~15시)',
       type: 'discount',
       rate: 0.1,
-      match: { brands: [...BRAND_GROUPS.DINING], categories: ['식비'] },
+      // 약관의 음식점은 브랜드 열거가 아니라 업종 기준이다 — 한식·일식·
+      // 양식·중식·일반대중음식·패스트푸드·뷔페. 그래서 카테고리 폴백을 쓴다.
+      // 그 폴백이 배달앱까지 삼키지 않도록 여기서 막는다.
+      match: {
+        brands: [...BRAND_GROUPS.DINING],
+        categories: ['식비'],
+        excludeKeywords: DELIVERY_APPS,
+      },
       timeWindow: { startHour: 7, endHour: 15, label: '07~15시' },
       maxEligibleAmountPerTx: 10_000,
       bonusDay: PLAN_DAY,
@@ -194,7 +213,10 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       label: '편의점 10% (18~22시)',
       type: 'discount',
       rate: 0.1,
-      match: { brands: ['CU', 'GS25', 'SEVEN_ELEVEN', 'EMART24'] },
+      match: {
+        brands: ['CU', 'GS25', 'SEVEN_ELEVEN', 'EMART24'],
+        excludeKeywords: DELIVERY_APPS,
+      },
       timeWindow: { startHour: 18, endHour: 22, label: '18~22시' },
       maxEligibleAmountPerTx: 10_000,
       bonusDay: PLAN_DAY,

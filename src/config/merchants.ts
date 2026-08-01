@@ -31,6 +31,13 @@ export const BRAND_ALIASES: Record<string, string[]> = {
   SEVEN_ELEVEN: ['세븐일레븐', '코리아세븐'],
   EMART24: ['이마트24'],
 
+  // 패밀리레스토랑·뷔페 (신한 Time Plan 음식점 영역의 양식·뷔페 업종)
+  OUTBACK: ['아웃백스테이크하우스', '아웃백', 'OUTBACK'],
+  VIPS: ['빕스', 'VIPS'],
+  ASHLEY: ['애슐리퀸즈', '애슐리'],
+  TGIF: ['TGI프라이데이스', '티지아이프라이데이스', 'TGIF'],
+  MADFORGARLIC: ['매드포갈릭'],
+
   // 배달
   BAEMIN: ['배달의민족', '우아한형제들', '배민'],
   COUPANG_EATS: ['쿠팡이츠'],
@@ -237,9 +244,23 @@ export const BRAND_GROUPS = {
   ],
   CONVENIENCE: ['CU', 'GS25', 'SEVEN_ELEVEN', 'EMART24', 'MINISTOP'],
   DELIVERY: ['BAEMIN', 'COUPANG_EATS', 'YOGIYO'],
+  /*
+   * 음식점.
+   *
+   * 신한 Discount Plan Time Plan의 음식점 영역은 **브랜드 열거가 아니라
+   * 업종 기준**이다 — 한식·일식·양식·중식·일반대중음식·패스트푸드·뷔페.
+   * 그래서 카드 룰은 카테고리('식비') 폴백을 함께 쓴다.
+   *
+   * 그래도 브랜드를 적어 두는 이유는, Notion 카테고리가 비어 있을 때
+   * 가맹점명만으로도 걸리게 하기 위해서다. 예전에는 패스트푸드만 있어서
+   * 아웃백·빕스 같은 패밀리레스토랑이 카테고리 없이는 '대상 가맹점 아님'
+   * 으로 떨어졌다 — 업종상 명백한 대상인데도.
+   */
   DINING: [
     'MCDONALDS', 'BURGERKING', 'LOTTERIA', 'MOMSTOUCH', 'SUBWAY', 'KFC',
     'NOBRANDBURGER', 'BHC', 'BBQ', 'KYOCHON', 'GOOBNE', 'PIZZAHUT', 'DOMINO',
+    // 패밀리레스토랑·뷔페 (양식/뷔페 업종)
+    'OUTBACK', 'VIPS', 'ASHLEY', 'TGIF', 'MADFORGARLIC',
   ],
   MART: ['EMART', 'HOMEPLUS', 'LOTTE_MART', 'COSTCO', 'NONGHYUP_HANARO'],
   DEPARTMENT: [
