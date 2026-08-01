@@ -127,8 +127,9 @@ describe('박아 둔 7월 실적이 8월 구간을 정한다', () => {
     // 탄탄대로 196만 → 80만 구간 (최고)
     expect(by('kb-tantandaero').appliedTier?.threshold).toBe(800_000);
 
-    // Amex Blue 70만 → 30만 구간 (최고)
-    expect(by('samsung-amex-blue').appliedTier?.threshold).toBe(300_000);
+    // Amex Blue 70만 → 60만 구간. **최고(90만)가 아니다.**
+    // 구간표를 30만 한 단계로 알고 있을 때는 '최고 구간'으로 잘못 봤다.
+    expect(by('samsung-amex-blue').appliedTier?.threshold).toBe(600_000);
   });
 
   it('8월에는 혜택 한도가 실제로 열린다', () => {

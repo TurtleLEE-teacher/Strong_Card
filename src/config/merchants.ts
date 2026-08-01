@@ -193,6 +193,19 @@ export const BRAND_ALIASES: Record<string, string[]> = {
   KYOBO: ['교보문고', '교보'],
   ALADIN: ['알라딘'],
 
+  // ── 삼성 Amex Blue 약관에 열거된 가맹점 ──────────────────────────────
+  // 쇼핑 1.5%는 '온라인 간편결제 수단'이 대상이라 가맹점이 아니라 결제수단이
+  // 찍힌다. 문자에 그 이름이 남는 경우가 많아 브랜드로 잡는다.
+  SAMSUNG_PAY: ['삼성페이', 'SAMSUNGPAY', '삼성월렛'],
+  PAYCO: ['PAYCO', '페이코'],
+  SMILEPAY: ['스마일페이', 'SMILEPAY'],
+  COUPAY: ['coupay', '쿠페이', '쿠팡페이'],
+  SSGPAY: ['SSGPAY', 'SSG페이', '쓱페이'],
+  LPAY: ['L.pay', 'LPAY', '엘페이'],
+  SHINSEGAE_SIMON: ['신세계사이먼', '사이먼프리미엄아울렛'],
+  HYUNDAI_OUTLET: ['현대프리미엄아울렛', '현대아울렛'],
+  EIGHT_SECONDS: ['8SECONDS', '에이트세컨즈', '에잇세컨즈'],
+
   // ── 탄탄대로 약관에 열거된 가맹점 ────────────────────────────────────
   // 약관이 "SPA패션: ZARA, H&M, 유니클로"처럼 **열거식**이라 그대로 넣는다.
   ZARA: ['ZARA', '자라'],
@@ -248,6 +261,22 @@ export const BRAND_GROUPS = {
   ],
   LIVING: ['DAISO', 'OLIVEYOUNG'],
   FRESH_DELIVERY: ['KURLY', 'OASIS'],
+
+  /*
+   * ── 삼성 Amex Blue 전용 묶음 ──────────────────────────────────────
+   * 약관이 대상점을 열거한다. 일반 묶음을 쓰면 대상이 아닌 곳까지 붙는다.
+   *   대중교통  버스·지하철만 (TRANSIT에 든 택시·KTX는 대상이 아니다)
+   *   스트리밍  6곳만 (SUBSCRIPTION 14곳을 쓰면 과다 계상)
+   *   쇼핑     간편결제 수단 · 프리미엄아울렛 · 트렌디패션
+   */
+  AB_TRANSIT: ['TMONEY'],
+  AB_STREAMING: ['NETFLIX', 'WAVVE', 'TVING', 'WATCHA', 'MELON', 'FLO'],
+  AB_EASY_PAY: [
+    'SAMSUNG_PAY', 'NAVERPAY', 'KAKAOPAY', 'PAYCO', 'SMILEPAY',
+    'COUPAY', 'SSGPAY', 'LPAY',
+  ],
+  AB_OUTLET: ['SHINSEGAE_SIMON', 'HYUNDAI_OUTLET'],
+  AB_TRENDY_FASHION: ['ZARA', 'H_AND_M', 'EIGHT_SECONDS'],
 
   /*
    * ── 탄탄대로 전용 묶음 ────────────────────────────────────────────
