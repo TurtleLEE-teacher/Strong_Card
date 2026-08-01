@@ -7,7 +7,7 @@ import { issuerLabel } from '@/config/issuers';
 import { guidesFor } from '@/lib/rule-guide';
 import { performanceSeverity } from '@/lib/severity';
 import { monthShort, won, wonShort } from '@/lib/format';
-import { previousMonthKey } from '@/lib/date';
+import { nextMonthKey, previousMonthKey } from '@/lib/date';
 
 /**
  * 카드 위젯은 두 가지 형태로 나뉜다.
@@ -76,6 +76,11 @@ export function CardWidget({ card, snapshot, daysRemaining }: Props) {
  * 혜택 금액은 stat 값 크기(20px)로 둔다. 예전에는 카드마다 2xl로 그려서
  * 화면에 히어로 숫자가 일곱 개가 됐고, 그 바람에 대시보드 총합이 묻혔다.
  * 히어로 숫자는 화면당 하나다.
+ *
+ * 금액에 붙는 달은 **이름으로 못 박는다.** '이번 달 받은 혜택' 바로 아래에
+ * '7월 실적 …' 줄이 오면, 그 줄이 금액의 설명처럼 읽혀서 숫자까지 지난달
+ * 것으로 보인다. 실제로는 이번 달 금액이고 아랫줄은 한도의 근거일 뿐이다.
+ * 그래서 달 이름을 앞에 박고, 근거 줄에는 '한도 기준'을 명시한다.
  */
 function Header({
   card,
@@ -90,8 +95,8 @@ function Header({
   const basis = !card.performance.required
     ? '실적 조건 없음'
     : snapshot.previousSpendSource === 'unknown'
-      ? `${sourceMonth} 거래 기록 없음 — 실적 확인 필요`
-      : `${sourceMonth} 실적 ${snapshot.appliedTier?.label ?? '미달'} 기준${
+      ? `한도 기준 · ${sourceMonth} 거래 기록 없음 — 실적 확인 필요`
+      : `한도 기준 · ${sourceMonth} 실적 ${snapshot.appliedTier?.label ?? '미달'}${
           snapshot.previousSpendSource === 'manual' ? ' (직접 입력)' : ''
         }`;
 
@@ -122,7 +127,7 @@ function Header({
       <div className="mt-3 flex items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            이번 달 받은 혜택
+            {monthShort(snapshot.month)}에 받은 혜택
           </p>
           <p className="truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>
             {basis}
@@ -237,10 +242,13 @@ function PerformanceSection({
     : [];
 
   const severity = performanceSeverity(ratio, !nextTier, daysRemaining);
+  // '다음 달'이 아니라 달 이름을 쓴다. 이 바가 이번 달 지출인지 다음 달
+  // 혜택인지 헷갈리는 순간 사다리 전체가 안 읽힌다.
+  const targetMonth = monthShort(nextMonthKey(snapshot.month));
 
   return (
     <Block
-      title="다음 달을 위한 이번 달 실적"
+      title={`${monthShort(snapshot.month)} 실적 → ${targetMonth} 혜택을 정함`}
       aside={
         <p className="shrink-0 text-xs tabular" style={{ color: 'var(--text-muted)' }}>
           <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -259,9 +267,10 @@ function PerformanceSection({
 
         <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
           {!nextTier ? (
-            <>최고 구간 달성 — 더 채울 필요 없습니다</>
+            <>최고 구간 달성 — {targetMonth} 혜택은 이미 확정입니다</>
           ) : (
             <>
+              {targetMonth}{' '}
               <strong style={{ color: 'var(--text-primary)' }}>{nextTier.label}</strong> 구간까지{' '}
               <strong style={{ color: 'var(--text-primary)' }}>{won(remainingToNextTier)}</strong>{' '}
               남음

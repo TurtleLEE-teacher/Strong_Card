@@ -10,7 +10,7 @@ import { issuerLabel } from '@/config/issuers';
 import { guidesFor } from '@/lib/rule-guide';
 import { performanceSeverity } from '@/lib/severity';
 import { dateTimeShort, monthLabel, monthShort, won, wonShort } from '@/lib/format';
-import { previousMonthKey } from '@/lib/date';
+import { nextMonthKey, previousMonthKey } from '@/lib/date';
 import type { CardId } from '@/lib/types';
 
 export const revalidate = 300;
@@ -53,6 +53,24 @@ export default async function CardDetailPage({
   // BenefitUsage.ruleId는 공유 한도(capGroup)면 그룹 키라서, 그 그룹에 속한
   // 룰 전부의 거래를 합쳐야 한 영역의 내역이 된다.
   const txById = new Map(monthTx.map((tx) => [tx.id, tx]));
+
+  /*
+   * 이번 달에 **실제로 혜택이 붙은 결제**만 금액 순으로 모은다.
+   *
+   * 예전에는 이걸 보려면 혜택 영역을 하나씩 펼치거나, 받은 건과 못 받은
+   * 건이 섞인 전체 거래 목록을 눈으로 훑어야 했다. "이번 달에 뭘로 얼마를
+   * 받았나"는 이 화면에서 가장 먼저 답해야 할 질문인데 어디에도 한
+   * 덩어리로 있지 않았다.
+   *
+   * 취소로 회수된 건(음수)도 남긴다 — 합계가 왜 줄었는지 설명해야 한다.
+   */
+  const earned = snapshot.appliedBenefits
+    .filter((b) => b.netAmount !== 0)
+    .flatMap((benefit) => {
+      const tx = txById.get(benefit.transactionId);
+      return tx ? [{ benefit, tx }] : [];
+    })
+    .sort((a, b) => b.benefit.netAmount - a.benefit.netAmount);
   const contributionsFor = (usage: (typeof snapshot.benefitUsage)[number]): UsageContribution[] => {
     const ruleIds = usage.capGroup
       ? new Set(card.benefits.filter((r) => r.capGroup === usage.capGroup).map((r) => r.id))
@@ -111,7 +129,7 @@ export default async function CardDetailPage({
       <Panel title="실적 흐름">
         <div className="grid grid-cols-2 gap-4">
           <Stat
-            label={`${monthShort(previousMonthKey(month))} 실적 (이번 달 혜택을 결정함)`}
+            label={`${monthShort(previousMonthKey(month))} 실적 (${monthShort(month)} 혜택을 결정함)`}
             value={
               snapshot.previousSpendSource === 'unknown' ? '기록 없음' : won(snapshot.previousSpend)
             }
@@ -127,11 +145,13 @@ export default async function CardDetailPage({
             }
           />
           <Stat
-            label={`${monthShort(month)} 실적 (다음 달 혜택을 결정함)`}
+            label={`${monthShort(month)} 실적 (${monthShort(nextMonthKey(month))} 혜택을 결정함)`}
             value={won(snapshot.currentSpend)}
             note={
               snapshot.nextTier
-                ? `${snapshot.nextTier.label}까지 ${won(snapshot.remainingToNextTier)}`
+                ? `${monthShort(nextMonthKey(month))} ${snapshot.nextTier.label} 구간까지 ${won(
+                    snapshot.remainingToNextTier,
+                  )} 남음`
                 : '최고 구간 달성'
             }
           />
@@ -158,6 +178,75 @@ export default async function CardDetailPage({
               ariaLabel="이번 달 실적 진행률"
             />
           </div>
+        )}
+      </Panel>
+
+      {/*
+        이번 달에 실제로 뭘로 얼마를 받았나 — 이 화면의 첫 질문이다.
+        영역별 소진 현황(아래)은 '한도가 얼마나 찼나'에 답하고, 이 목록은
+        '어떤 결제가 그 한도를 채웠나'에 답한다. 둘은 다른 질문이다.
+      */}
+      <Panel
+        title={`${monthShort(month)}에 받은 혜택 ${won(snapshot.totalBenefitUsed)}`}
+        subtitle={
+          earned.length > 0
+            ? `${earned.length}건의 결제에서 받았습니다`
+            : undefined
+        }
+      >
+        {earned.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {monthTx.length === 0
+              ? `${monthShort(month)} 거래가 아직 없습니다.`
+              : `${monthShort(month)}에는 아직 혜택이 붙은 결제가 없습니다. 아래 거래 목록에 건별 이유가 적혀 있습니다.`}
+          </p>
+        ) : (
+          <ul className="divide-y" style={{ borderColor: 'var(--border)' }}>
+            {earned.map(({ benefit, tx }) => (
+              <li key={benefit.transactionId} className="flex items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px]" style={{ color: 'var(--text-primary)' }}>
+                    {tx.title}
+                  </p>
+                  <p className="truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    {dateTimeShort(tx.approvedAt)} · {won(Math.abs(tx.krwAmount))} ·{' '}
+                    {benefit.ruleLabel}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  {benefit.netAmount > 0 ? (
+                    <p
+                      className="text-[13px] font-semibold tabular"
+                      style={{ color: 'var(--status-good)' }}
+                    >
+                      +{won(benefit.netAmount)}
+                    </p>
+                  ) : (
+                    /* 취소로 되돌아간 혜택. 한도가 돌아온 것이라 경고가 아니다. */
+                    <p className="text-[13px] tabular" style={{ color: 'var(--text-muted)' }}>
+                      −{won(-benefit.netAmount)} 회수
+                    </p>
+                  )}
+                  {/*
+                    월 한도에 걸린 것만 알린다.
+
+                    건당 한도(per-tx)는 그 규칙이 원래 그렇게 생긴 것이지
+                    사용자가 놓친 게 아니다. 18만원 음식점 결제마다 '한도로
+                    17,500원 깎임'이 붙으면 매번 큰 손해를 본 것처럼 읽히는데,
+                    실제로는 애초에 건당 1,000원짜리 혜택이다. 반면 월 한도
+                    소진은 '이 카드는 이제 그만 쓰라'는 실행 가능한 신호다.
+                  */}
+                  {benefit.cappedAmount > 0 &&
+                    (benefit.cappedBy === 'per-month' || benefit.cappedBy === 'total') && (
+                      <p className="text-[11px] tabular" style={{ color: 'var(--text-muted)' }}>
+                        {benefit.cappedBy === 'total' ? '통합' : '월'} 한도로{' '}
+                        {won(benefit.cappedAmount)} 못 받음
+                      </p>
+                    )}
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </Panel>
 
