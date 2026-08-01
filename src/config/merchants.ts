@@ -125,7 +125,12 @@ export const BRAND_ALIASES: Record<string, string[]> = {
   MUSINSA: ['무신사', 'MUSINSA'],
   TWENTYNINECM: ['29CM', '이십구센티미터'],
   NAVER_STORE: ['네이버플러스스토어', '네이버쇼핑', '네이버스토어'],
-  SSG: ['SSG닷컴', '에스에스지'],
+  // '이마트몰'은 SSG.COM으로 통합됐다. 여기 없으면 접두일치로 EMART(마트
+  // 영역)에 붙는데, 신한 Discount Plan 약관은 마트 영역을 **오프라인 매장
+  // 이용 시에만** 할인한다고 못 박는다. 금액은 같아도(둘 다 10%) 일 1회·
+  // 월 5회 횟수가 엉뚱한 영역에서 깎인다. 완전일치가 접두일치를 이기므로
+  // 여기 적어 두면 온라인쇼핑 영역으로 간다.
+  SSG: ['SSG닷컴', 'SSG.COM', '쓱닷컴', '에스에스지', '이마트몰'],
   GMARKET: ['지마켓', 'GMARKET'],
   ELEVENST: ['11번가'],
   AUCTION: ['옥션', 'AUCTION'],
