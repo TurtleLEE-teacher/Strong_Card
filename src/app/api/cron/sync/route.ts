@@ -75,7 +75,10 @@ export async function POST(request: Request) {
             last4: tx.last4,
             cardProduct: card.notionOption,
             krwAmount: tx.krwAmount,
-            performanceVerdict: judgeTransaction(card, tx),
+            // 스냅샷의 판정을 쓴다. judgeTransaction()을 다시 부르면 혜택 때문에
+            // 빠진 거래(탄탄대로 Trendy)가 노션에는 '인정'으로 찍혀, 노션을 보고
+            // 실적을 더하면 앱 화면과 다른 숫자가 나온다.
+            performanceVerdict: snapshot.performanceVerdicts[tx.id] ?? judgeTransaction(card, tx),
             benefitAmount: benefit?.netAmount ?? 0,
             alertStatus,
           });

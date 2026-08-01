@@ -27,13 +27,21 @@ export type Currency = 'KRW' | 'USD' | 'JPY' | 'EUR' | '기타';
 
 export type PaymentKind = '일시불' | '할부' | '해외' | '취소·환불';
 
-/** 실적 제외 사유. Notion `실적 인정` select와 대응한다. */
+/**
+ * 실적 제외 사유. Notion `실적 인정` select와 대응한다.
+ *
+ * '제외-혜택'은 가맹점 때문이 아니라 **혜택을 받았다는 이유로** 빠진 건이다
+ * (탄탄대로 Trendy). 사유가 전혀 다른데 '제외-기타'에 섞어 두면 화면에서
+ * 연회비·수수료와 한 줄로 뭉뚱그려져 "왜 내 12만원이 실적에서 빠졌지"에
+ * 답할 수 없다.
+ */
 export type PerformanceVerdict =
   | '인정'
   | '제외-취소'
   | '제외-공과금'
   | '제외-상품권'
   | '제외-무승인'
+  | '제외-혜택'
   | '제외-기타';
 
 // ---------------------------------------------------------------------------
@@ -328,6 +336,15 @@ export interface CardMonthlySnapshot {
   /** 제외된 금액 합계 */
   excludedSpend: number;
   exclusions: ExclusionSummary[];
+  /**
+   * 거래별 최종 실적 판정.
+   *
+   * **혜택 때문에 빠진 건('제외-혜택')까지 반영된 값**이다. 노션 역기입처럼
+   * 거래 하나의 판정이 필요한 곳은 반드시 이 값을 써야 한다 —
+   * judgeTransaction()을 다시 부르면 Trendy 할인으로 빠진 거래가 '인정'으로
+   * 찍혀 노션과 앱 화면이 서로 다른 말을 하게 된다.
+   */
+  performanceVerdicts: Record<string, PerformanceVerdict>;
   /** currentSpend 기준으로 지금 달성한 구간 */
   reachedTier: SpendTier | null;
   /** 아직 못 넘은 다음 구간 */

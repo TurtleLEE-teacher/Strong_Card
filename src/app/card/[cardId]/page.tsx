@@ -8,6 +8,7 @@ import { UsageRow, type UsageContribution } from '@/components/UsageRow';
 import { CardFace } from '@/components/CardFace';
 import { RefreshButton } from '@/components/RefreshButton';
 import { issuerLabel } from '@/config/issuers';
+import { VERDICT_LABELS } from '@/config/exclusions';
 import { guidesFor } from '@/lib/rule-guide';
 import { performanceSeverity } from '@/lib/severity';
 import { dateTimeShort, monthLabel, monthShort, won, wonShort } from '@/lib/format';
@@ -319,7 +320,7 @@ export default async function CardDetailPage({
             {snapshot.exclusions.map((ex) => (
               <li key={ex.verdict} className="flex justify-between text-xs">
                 <span style={{ color: 'var(--text-secondary)' }}>
-                  {ex.verdict.replace('제외-', '')} · {ex.count}건
+                  {VERDICT_LABELS[ex.verdict]} · {ex.count}건
                 </span>
                 <span className="tabular" style={{ color: 'var(--text-primary)' }}>
                   {won(ex.amount)}
@@ -327,6 +328,14 @@ export default async function CardDetailPage({
               </li>
             ))}
           </ul>
+          {/* 가맹점 때문이 아니라 '혜택을 받았다'는 이유로 빠진 줄은
+              설명이 없으면 오해를 산다 — 앱이 잘못 센 것처럼 보인다. */}
+          {snapshot.exclusions.some((ex) => ex.verdict === '제외-혜택') && (
+            <p className="mt-2.5 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              혜택받은 결제 — 약관상 이 할인을 받은 이용건은 결제액 전체가 실적에서
+              빠집니다. 할인은 그대로 받습니다.
+            </p>
+          )}
         </Panel>
       )}
 

@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { CARDS_BY_ID } from '@/config/cards';
 import { buildSnapshot } from '@/lib/engine/snapshot';
+import { estimateBenefit } from '@/lib/engine/recommend';
 import type { Transaction } from '@/lib/types';
 
 const card = CARDS_BY_ID['kb-tantandaero'];
@@ -77,6 +78,97 @@ describe('Trendy 할인을 받은 거래는 실적에서 빠진다', () => {
     const snap = buildSnapshot(card, [tx('헤어살롱 청담', 120_000, '2026-07-09')], '2026-07');
     expect(snap.appliedTier?.threshold).toBe(0);
     expect(snap.currentSpend).toBe(120_000);
+  });
+});
+
+describe('실적에서 왜 빠졌는지 화면과 노션이 같은 말을 한다', () => {
+  const snap = () =>
+    buildSnapshot(
+      card,
+      [
+        tx('아무데나', 900_000, '2026-06-15'),
+        tx('헤어살롱 청담', 120_000, '2026-07-09'), // Trendy 20%
+        tx('서울시청지방세', 50_000, '2026-07-11'), // 공과금
+      ],
+      '2026-07',
+    );
+
+  it('혜택 때문에 빠진 건은 「제외-혜택」으로 따로 잡힌다', () => {
+    // 연회비·수수료와 같은 '기타' 칸에 섞이면 사용자는 12만원이 왜
+    // 빠졌는지 화면에서 알아낼 방법이 없다.
+    const s = snap();
+    const benefited = s.exclusions.find((e) => e.verdict === '제외-혜택')!;
+    expect(benefited.amount).toBe(120_000);
+    expect(benefited.count).toBe(1);
+    // 공과금은 제 사유 그대로 남는다
+    expect(s.exclusions.find((e) => e.verdict === '제외-공과금')?.amount).toBe(50_000);
+  });
+
+  it('거래별 판정에도 보정 결과가 실린다 (노션 역기입이 쓰는 값)', () => {
+    const s = snap();
+    const hair = Object.entries(s.performanceVerdicts).find(([id]) =>
+      s.appliedBenefits.some((b) => b.transactionId === id && b.ruleId === 'tt-trendy-beauty'),
+    )!;
+    expect(hair[1]).toBe('제외-혜택');
+  });
+});
+
+describe('추천 화면이 실적 함정을 거꾸로 말하지 않는다', () => {
+  // 지난달 30만 → 이번 달 실적 미달 구간이지만, 이번 달에 이미 38만을 써서
+  // 40만 구간까지 2만원 남은 상황... 은 할인이 0원이라 함정이 안 생긴다.
+  // 함정은 **할인을 실제로 받는** 80만 구간에서 나온다.
+  const snap = buildSnapshot(
+    card,
+    [
+      tx('아무데나', 900_000, '2026-06-15'), // 지난달 → 80만 구간
+      tx('일반결제', 390_000, '2026-07-02'), // 이번 달 실적 39만 (40만까지 1만원)
+    ],
+    '2026-07',
+  );
+
+  it('Trendy 할인은 「구간 달성」이 아니라 「실적에서 빠진다」고 알린다', () => {
+    const rec = estimateBenefit(card, snap, {
+      merchant: '하이마트 역삼점',
+      amount: 120_000,
+      at: '2026-07-20T03:00:00Z',
+    });
+    expect(rec.expectedBenefit).toBe(20_000); // 할인은 그대로 받는다
+    expect(rec.performanceImpact).toBe('excluded');
+    expect(rec.performanceNote).toContain('실적에서 빠집니다');
+    // 예전에는 여기서 "이 결제로 40만원 구간 달성"이라고 정반대로 말했다.
+    expect(rec.performanceNote).not.toContain('구간 달성');
+  });
+
+  it('한도가 소진돼 할인이 0원이면 실적에는 그대로 잡힌다', () => {
+    // 이미 Trendy 미용 한도(20,000)를 다 쓴 뒤라면 할인이 안 붙고,
+    // 할인을 못 받았으면 실적에서 뺄 이유도 없다.
+    const spent = buildSnapshot(
+      card,
+      [
+        tx('아무데나', 900_000, '2026-06-15'),
+        tx('일반결제', 390_000, '2026-07-02'),
+        tx('헤어살롱 청담', 200_000, '2026-07-05'), // 한도 20,000 소진
+      ],
+      '2026-07',
+    );
+    const rec = estimateBenefit(card, spent, {
+      merchant: '하이마트 역삼점',
+      amount: 120_000,
+      at: '2026-07-20T03:00:00Z',
+    });
+    expect(rec.expectedBenefit).toBe(0);
+    expect(rec.performanceImpact).toBe('counts');
+    expect(rec.performanceNote).toContain('구간 달성');
+  });
+
+  it('Daily 영역은 평소대로 실적 안내를 한다', () => {
+    const rec = estimateBenefit(card, snap, {
+      merchant: '이마트 성수점',
+      amount: 120_000,
+      at: '2026-07-20T03:00:00Z',
+    });
+    expect(rec.performanceImpact).toBe('counts');
+    expect(rec.performanceNote).toContain('구간 달성');
   });
 });
 

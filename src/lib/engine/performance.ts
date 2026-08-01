@@ -10,6 +10,7 @@
  */
 
 import type {
+  BenefitRule,
   Card,
   ExclusionRule,
   ExclusionSummary,
@@ -80,6 +81,20 @@ function matchesExclusion(
 }
 
 /**
+ * 이 혜택을 받으면 **결제액 전체가 실적에서 빠지는가.**
+ *
+ * `excludeBenefitedGroups`는 룰 id와 capGroup을 섞어 쓸 수 있으므로 둘 다 본다.
+ * 실적 계산(snapshot)과 추천(recommend)이 같은 판단을 해야 하므로 여기 한 곳에만 둔다 —
+ * 갈라지면 "이 카드로 결제하면 구간 달성"이라고 권해 놓고 정작 실적에는 안 잡는
+ * 자기모순이 생긴다.
+ */
+export function excludesSpendFromPerformance(card: Card, rule: BenefitRule): boolean {
+  const groups = card.performance.excludeBenefitedGroups;
+  if (!groups?.length) return false;
+  return groups.includes(rule.id) || (rule.capGroup ? groups.includes(rule.capGroup) : false);
+}
+
+/**
  * 한 달치 거래에서 실적을 집계한다.
  * `transactions`는 **이미 해당 월·해당 카드로 필터링돼 있어야 한다.**
  */
@@ -108,7 +123,7 @@ export function computePerformance(
     // 강제 제외가 먼저다. 가맹점 판정으로는 '인정'인데 혜택을 받았다는
     // 이유로 빠지는 건이라 일반 제외 규칙으로는 표현할 수 없다.
     options.forceExclude?.has(tx.id)
-      ? (options.forceExcludeVerdict ?? '제외-기타')
+      ? (options.forceExcludeVerdict ?? '제외-혜택')
       : judgeTransaction(card, tx);
 
   // 1. 정상 거래를 먼저 판정한다.
@@ -121,7 +136,7 @@ export function computePerformance(
   //    칸에 떨어지면 한쪽은 부풀고 한쪽은 음수가 된다.
   //
   //    forceExclude(탄탄대로 Trendy)도 이 한 줄이 함께 처리한다 — 원거래가
-  //    강제 제외되면 전표도 같은 '제외-기타'를 물려받는다. 전표만 '인정'으로
+  //    강제 제외되면 전표도 같은 '제외-혜택'을 물려받는다. 전표만 '인정'으로
   //    남으면 실적이 취소액만큼 마이너스로 깎인다.
   //    짝을 못 찾은 전표는 일반 규칙으로 판정한다.
   const links = linkReversals(transactions);

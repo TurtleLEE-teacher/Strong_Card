@@ -1,4 +1,20 @@
-import type { ExclusionRule } from '@/lib/types';
+import type { ExclusionRule, PerformanceVerdict } from '@/lib/types';
+
+/**
+ * 실적 제외 사유를 화면에 보여줄 이름.
+ *
+ * 판정값에서 '제외-'만 떼면 '혜택'이라는 한 단어가 남는데, 그것만 보고
+ * "혜택 때문에 실적이 빠졌다"는 뜻을 읽어낼 사람은 없다.
+ */
+export const VERDICT_LABELS: Record<PerformanceVerdict, string> = {
+  인정: '인정',
+  '제외-취소': '취소',
+  '제외-공과금': '공과금',
+  '제외-상품권': '상품권',
+  '제외-무승인': '무승인',
+  '제외-혜택': '혜택받은 결제',
+  '제외-기타': '기타',
+};
 
 /**
  * 카드사 공통 실적 제외 항목.
