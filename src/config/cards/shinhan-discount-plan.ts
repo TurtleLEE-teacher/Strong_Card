@@ -228,8 +228,16 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       label: '마트 10%',
       type: 'discount',
       rate: 0.1,
-      // 창고형·기업형 슈퍼(이마트 에브리데이, 롯데슈퍼)는 제외
-      match: { brands: [...BRAND_GROUPS.DP_MART] },
+      // 약관: "마트 영역은 대상 가맹점 외 창고형 할인매장, 기업형 슈퍼마켓
+      // (이마트 에브리데이, 롯데슈퍼 등) 이용 시에는 할인되지 않습니다."
+      //
+      // '이마트 에브리데이'는 접두일치로 EMART에 붙어 마트 영역으로 들어온다.
+      // 약관이 콕 집어 제외한 곳이라 키워드로 걸러낸다.
+      // (롯데슈퍼는 어느 브랜드에도 안 걸려 애초에 들어오지 않는다)
+      match: {
+        brands: [...BRAND_GROUPS.DP_MART],
+        excludeKeywords: ['에브리데이'],
+      },
       maxEligibleAmountPerTx: 50_000,
       bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
@@ -262,7 +270,10 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       label: '잡화 10% (올리브영·다이소)',
       type: 'discount',
       rate: 0.1,
-      match: { brands: ['OLIVEYOUNG', 'DAISO'] },
+      // 약관: "마트 영역 및 **다이소는 오프라인 매장 이용 시에만** 할인됩니다."
+      // 다이소몰(온라인)은 대상이 아닌데 접두일치로 DAISO에 붙는다.
+      // 올리브영은 온라인몰도 대상이라 제외하지 않는다.
+      match: { brands: ['OLIVEYOUNG', 'DAISO'], excludeKeywords: ['다이소몰'] },
       maxEligibleAmountPerTx: 50_000,
       bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
