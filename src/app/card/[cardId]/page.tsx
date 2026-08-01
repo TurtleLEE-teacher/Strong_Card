@@ -266,6 +266,7 @@ export default async function CardDetailPage({
           <ul className="divide-y" style={{ borderColor: 'var(--border)' }}>
             {monthTx.map((tx) => {
               const benefit = benefitByTx.get(tx.id);
+              const miss = snapshot.noBenefit[tx.id];
               return (
                 <li key={tx.id} className="flex items-center gap-3 py-2.5">
                   <div className="min-w-0 flex-1">
@@ -276,6 +277,18 @@ export default async function CardDetailPage({
                       {dateTimeShort(tx.approvedAt)}
                       {benefit && ` · ${benefit.ruleLabel}`}
                     </p>
+                    {/*
+                      혜택이 0원이면 **왜** 그런지 적는다. 이게 없으면
+                      "왜 안 먹었지"에 앱이 답을 못 하고, 사용자는 앱이
+                      고장 났는지 조건을 못 맞춘 건지 구분할 수 없다.
+                    */}
+                    {!benefit?.netAmount && miss && (
+                      <p className="mt-0.5 text-[11px]" style={{ color: 'var(--status-serious)' }}>
+                        {miss.reason}
+                        {miss.ruleLabel && ` — ${miss.ruleLabel}`}
+                        {miss.detail && ` (${miss.detail})`}
+                      </p>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-[13px] tabular" style={{ color: 'var(--text-primary)' }}>

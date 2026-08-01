@@ -364,6 +364,11 @@ export interface CardMonthlySnapshot {
    * 이게 없으면 월 5회를 이미 다 쓴 혜택을 계속 추천하게 된다.
    */
   ruleCounts: Record<string, number>;
+  /**
+   * 혜택이 0원인 거래와 그 이유.
+   * "왜 이 결제는 혜택이 안 붙었지?"에 화면이 답할 수 있게 한다.
+   */
+  noBenefit: Record<string, { reason: string; ruleLabel?: string; detail?: string }>;
   /** 혜택 매칭에 실패한 거래 (미분류 관리 화면에서 쓴다) */
   unmatchedTransactionIds: string[];
   transactionCount: number;

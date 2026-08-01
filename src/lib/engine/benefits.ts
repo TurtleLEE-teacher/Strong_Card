@@ -39,6 +39,8 @@ export interface BenefitResult {
   totalCap: number | null;
   /** 어떤 룰에도 매칭되지 않은 거래 */
   unmatchedTransactionIds: string[];
+  /** 혜택이 0원인 거래와 그 이유. "왜 안 먹었지"에 답하기 위한 것. */
+  noBenefit: Record<string, NoBenefitNote>;
   /**
    * 룰별 이번 달 적용 횟수.
    * 추천 엔진이 "이미 월 5회를 다 썼는지"를 알려면 이 값이 필요하다.
@@ -261,6 +263,82 @@ function firstUnlock(
   return undefined;
 }
 
+/**
+ * 혜택이 0원인 이유.
+ *
+ * "왜 이 결제는 혜택이 안 붙었지?"에 앱이 답할 수 있어야 한다. 엔진은
+ * 이유를 알면서도 버리고 있었고, 화면에는 금액만 남아 사용자가 앱이
+ * 고장 났는지 조건을 못 맞춘 건지 구분할 수 없었다.
+ */
+export type NoBenefitReason =
+  | '대상 가맹점 아님'
+  | '실적 미달로 잠김'
+  | '건당 최소금액 미달'
+  | '횟수 초과'
+  | '실적 제외 항목'
+  | '월 한도 소진'
+  | '취소·환불';
+
+export interface NoBenefitNote {
+  reason: NoBenefitReason;
+  /** 어느 혜택에 걸릴 뻔했는지 (알 수 있으면) */
+  ruleLabel?: string;
+  /** 조건을 숫자로 (예: '건당 20,000원 이상') */
+  detail?: string;
+}
+
+/**
+ * selectRule이 아무것도 못 고른 이유를 짚는다.
+ *
+ * 후보를 우선순위대로 훑으면서 **어디서 걸렸는지** 기록한다. 가장 먼저
+ * 만난 '아깝게 놓친' 이유를 돌려준다 — 조건만 맞았으면 받았을 혜택이
+ * 사용자에게 가장 쓸모 있는 정보다.
+ */
+function explainNoRule(
+  card: Card,
+  tx: Transaction,
+  appliedTier: SpendTier | null,
+  counters: UsageCounters,
+): NoBenefitNote {
+  let best: NoBenefitNote | null = null;
+
+  const candidates = card.benefits
+    .filter((r) => isRuleEffective(tx.approvedAt, r.effectiveFrom, r.effectiveUntil))
+    .sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
+
+  for (const rule of candidates) {
+    // 가맹점·시각·요일이 안 맞으면 애초에 이 룰의 문제가 아니다.
+    if (!matchesRule(rule, tx)) continue;
+
+    if (resolveCap(rule.capPerMonth, appliedTier) === 0) {
+      best ??= { reason: '실적 미달로 잠김', ruleLabel: rule.label };
+      continue;
+    }
+    if (rule.minAmountPerTx && tx.krwAmount < rule.minAmountPerTx) {
+      // 금액만 채우면 받는 혜택이다. 가장 알려줄 값어치가 있으므로 즉시 확정.
+      return {
+        reason: '건당 최소금액 미달',
+        ruleLabel: rule.label,
+        detail: `건당 ${rule.minAmountPerTx.toLocaleString('ko-KR')}원 이상`,
+      };
+    }
+    if (!counters.hasRemainingCount(rule, tx)) {
+      best ??= {
+        reason: '횟수 초과',
+        ruleLabel: rule.label,
+        detail:
+          rule.maxCountPerDay !== undefined && rule.maxCountPerMonth !== undefined
+            ? `일 ${rule.maxCountPerDay}회 · 월 ${rule.maxCountPerMonth}회`
+            : rule.maxCountPerDay !== undefined
+              ? `일 ${rule.maxCountPerDay}회`
+              : `월 ${rule.maxCountPerMonth}회`,
+      };
+    }
+  }
+
+  return best ?? { reason: '대상 가맹점 아님' };
+}
+
 export interface ComputeBenefitsInput {
   card: Card;
   /** 이번 달 거래 (해당 카드로 이미 필터링된 것) */
@@ -293,23 +371,39 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
   const counters = new UsageCounters();
   const appliedBenefits: AppliedBenefit[] = [];
   const unmatchedTransactionIds: string[] = [];
+  const noBenefit: Record<string, NoBenefitNote> = {};
   let totalUsed = 0;
 
   for (const tx of transactions) {
-    if (tx.canceled || tx.paymentKind === '취소·환불') continue;
+    if (tx.canceled || tx.paymentKind === '취소·환불') {
+      noBenefit[tx.id] = { reason: '취소·환불' };
+      continue;
+    }
 
     const rule = selectRule(card, tx, appliedTier, counters);
+    const verdictForTx = verdicts?.get(tx.id);
+    const excluded = verdictForTx !== undefined && verdictForTx !== '인정';
+
     if (!rule) {
       // 실적 미달로 룰이 비활성이면 '미분류'가 아니다. 브랜드 사전에
       // 아예 없는 가맹점만 미분류로 올려야 관리 화면이 신호를 유지한다.
       if (!matchesAnyRule(card, tx)) unmatchedTransactionIds.push(tx.id);
+      // 실적에서 빠지는 거래라면 그걸 먼저 말한다. '대상 가맹점 아님'보다
+      // 중요한 사실이다 — 혜택뿐 아니라 실적에도 안 잡힌다는 뜻이니까.
+      noBenefit[tx.id] = excluded
+        ? { reason: '실적 제외 항목', detail: verdictForTx.replace('제외-', '') }
+        : explainNoRule(card, tx, appliedTier, counters);
       continue;
     }
 
     // 실적에서 제외된 거래(세금·상품권 등)는 원칙적으로 혜택도 없다.
     // 단, 룰이 명시적으로 opt-in 하면 준다 (예: 신한EV 하이패스 캐시백).
-    const verdict = verdicts?.get(tx.id);
-    if (verdict && verdict !== '인정' && !rule.applyToExcludedSpend) {
+    if (excluded && !rule.applyToExcludedSpend) {
+      noBenefit[tx.id] = {
+        reason: '실적 제외 항목',
+        ruleLabel: rule.label,
+        detail: verdictForTx.replace('제외-', ''),
+      };
       continue;
     }
 
@@ -366,6 +460,10 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
     // 실제로 할인이 붙었을 때만 보너스를 소진한다. 약관의 "첫 번째 **할인**
     // 거래"가 그 뜻이다 — 한도에 걸려 0원이 된 거래는 할인 거래가 아니다.
     if (bonusEligible && amount > 0) bonusDayUsed.add(capKey);
+
+    if (amount === 0) {
+      noBenefit[tx.id] = { reason: '월 한도 소진', ruleLabel: rule.label };
+    }
 
     monthlyUsed.set(capKey, used + amount);
     txCount.set(rule.id, (txCount.get(rule.id) ?? 0) + 1);
@@ -443,6 +541,7 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
     totalUsed,
     totalCap,
     unmatchedTransactionIds,
+    noBenefit,
     ruleCounts: Object.fromEntries(
       card.benefits.map((r) => [r.id, counters.countFor(r.id)]),
     ),
