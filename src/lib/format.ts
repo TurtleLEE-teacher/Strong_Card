@@ -48,6 +48,19 @@ export function monthShort(month: string): string {
   return `${Number(m)}월`;
 }
 
+/**
+ * UTC ISO → 'HH:mm' (KST)
+ *
+ * 서버에서 만들어 문자열로 내려보낸다. 클라이언트에서 '3분 전' 같은
+ * 상대 시각을 계산하면 서버 렌더 결과와 어긋나 hydration이 깨진다.
+ */
+export function timeShort(isoUtc: string): string {
+  const kst = new Date(new Date(isoUtc).getTime() + 9 * 60 * 60 * 1000);
+  const hh = String(kst.getUTCHours()).padStart(2, '0');
+  const mi = String(kst.getUTCMinutes()).padStart(2, '0');
+  return `${hh}:${mi}`;
+}
+
 /** UTC ISO → 'M/D HH:mm' (KST) */
 export function dateTimeShort(isoUtc: string): string {
   const kst = new Date(new Date(isoUtc).getTime() + 9 * 60 * 60 * 1000);

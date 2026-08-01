@@ -20,6 +20,14 @@ export interface DashboardData {
   unmapped: Transaction[];
   transactions: Transaction[];
   daysRemaining: number;
+  /**
+   * 이 데이터를 Notion에서 읽어온 시각 (UTC ISO).
+   *
+   * ISR 캐시(300초)에 그대로 얼어붙는 값이라, 화면이 지금 몇 시 기준인지를
+   * 정확히 가리킨다. 이게 없으면 사용자는 새로고침 버튼을 눌러도 뭐가
+   * 달라졌는지 알 수 없다.
+   */
+  fetchedAt: string;
   /** Notion 대신 데모 데이터를 쓰고 있는지 */
   isDemo: boolean;
   /** Notion 조회 실패 시 사유 */
@@ -62,6 +70,7 @@ export async function getDashboardData(month?: MonthKey): Promise<DashboardData>
     unmapped: findUnmappedTransactions(transactions, targetMonth),
     transactions,
     daysRemaining,
+    fetchedAt: new Date().toISOString(),
     isDemo,
     error,
   };

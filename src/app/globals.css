@@ -134,3 +134,21 @@ details[open] > summary .chevron {
   transition: transform 150ms ease;
   transform-origin: center;
 }
+
+/* 새로고침 중인 아이콘. 진행 중이라는 신호가 없으면 눌렸는지 알 수 없다. */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  display: inline-block;
+  animation: spin 700ms linear infinite;
+}
+/* 회전 애니메이션은 전정기관에 부담을 준다 — 끄기를 택한 사람에게는 멈춘다. */
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+    opacity: 0.5;
+  }
+}
