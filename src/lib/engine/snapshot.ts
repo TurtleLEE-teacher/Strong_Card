@@ -15,7 +15,13 @@ import type {
   SpendTier,
   Transaction,
 } from '@/lib/types';
-import { monthRangeUtc, previousMonthKey, toMonthKey, type MonthKey } from '@/lib/date';
+import {
+  byRecentFirst,
+  monthRangeUtc,
+  previousMonthKey,
+  toMonthKey,
+  type MonthKey,
+} from '@/lib/date';
 import {
   type PerformanceResult,
   computePerformance,
@@ -45,9 +51,7 @@ export function filterTransactions(
  * 누계는 단조 증가하므로 최신 거래의 값이 곧 그 달의 현재 누계다.
  */
 function latestIssuerCumulative(transactions: Transaction[]): number | null {
-  const withValue = transactions
-    .filter((tx) => tx.issuerCumulative !== null)
-    .sort((a, b) => new Date(b.approvedAt).getTime() - new Date(a.approvedAt).getTime());
+  const withValue = byRecentFirst(transactions.filter((tx) => tx.issuerCumulative !== null));
   return withValue[0]?.issuerCumulative ?? null;
 }
 
@@ -228,11 +232,16 @@ export function findUnmappedTransactions(
   month: MonthKey,
 ): Transaction[] {
   const { startUtc, endUtc } = monthRangeUtc(month);
-  return transactions.filter((tx) => {
-    if (tx.cardId !== null) return false;
-    const t = new Date(tx.approvedAt).getTime();
-    return t >= startUtc.getTime() && t < endUtc.getTime();
-  });
+  // 최신순으로 돌려준다. 설정 화면이 앞 30건만 자르므로, 노션에서 받은
+  // 순서(오래된 것부터) 그대로 두면 달 초 거래만 보이고 정작 방금 들어온
+  // 미매핑 거래는 잘려 나간다 — 지금 손봐야 할 건 항상 최근 것이다.
+  return byRecentFirst(
+    transactions.filter((tx) => {
+      if (tx.cardId !== null) return false;
+      const t = new Date(tx.approvedAt).getTime();
+      return t >= startUtc.getTime() && t < endUtc.getTime();
+    }),
+  );
 }
 
 export { toMonthKey };
