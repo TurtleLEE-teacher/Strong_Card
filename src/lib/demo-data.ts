@@ -63,6 +63,11 @@ export const DEMO_TRANSACTIONS: Transaction[] = [
   make('kb-tantandaero', '롯데백화점', 240_000, '07-16'),
   make('kb-tantandaero', '스타벅스 역삼점', 28_000, '07-22', '카페'),
   make('kb-tantandaero', 'GS25 편의점', 90_000, '07-25'),
+  // 상호에 정유사가 없는 주유소. 사전에 폴을 적어 둔 곳이라 주유 할인이 붙는다.
+  make('kb-tantandaero', '판교서일주유소', 70_000, '07-27'),
+  // 폴을 모르는 주유소. 노션 `브랜드` 열에서 지정하기 전까지는 미분류다 —
+  // 데모에서도 그 상태가 보여야 한다.
+  make('kb-tantandaero', '동서울주유소', 55_000, '07-28'),
   make('kb-tantandaero', '서울시청 지방세', 340_000, '07-26'), // 실적 제외
 
   make('kb-coupang-wow', '쿠팡', 380_000, '07-04'),

@@ -6,6 +6,7 @@ import { dateTimeShort, won } from '@/lib/format';
 import { previousMonthKey } from '@/lib/date';
 import { WARNING_DAYS } from '@/lib/alerts/rules';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { brandDisplayName } from '@/config/merchants';
 
 export const revalidate = 300;
 
@@ -44,9 +45,29 @@ function collectUnverified() {
 }
 
 export default async function SettingsPage() {
-  const { unmapped, snapshots, month, isDemo, error } = await getDashboardData();
+  const { unmapped, snapshots, transactions, month, isDemo, error } = await getDashboardData();
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null;
   const unverified = collectUnverified();
+
+  /*
+   * 노션에서 브랜드를 지정해 둔 가맹점.
+   *
+   * 지정이 먹었는지 확인할 자리가 있어야 한다. 노션에 적어 놓고 화면에서
+   * 아무 변화가 없으면, 잘못 적은 건지 앱이 아직 못 읽은 건지 알 길이 없다.
+   */
+  const designated = [
+    ...new Map(
+      transactions
+        .filter((tx) => tx.brand)
+        .map((tx) => [
+          `${tx.merchant?.trim() || tx.title}`,
+          {
+            merchant: tx.merchant?.trim() || tx.title,
+            brand: tx.brandLabel ?? brandDisplayName(tx.brand!),
+          },
+        ]),
+    ).values(),
+  ];
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-6 pb-16 sm:px-6">
@@ -180,6 +201,41 @@ export default async function SettingsPage() {
               ))}
             </ul>
           </>
+        )}
+      </Panel>
+
+      {/*
+        이름만으로는 브랜드를 알 수 없는 가맹점이 있다 — 자영 주유소는 간판(폴)과
+        상호가 따로 논다. 사람만 아는 사실이라 노션에서 받고, 받았다는 것을 여기서
+        되돌려 보여 준다.
+      */}
+      <Panel title={`노션에서 지정한 가맹점 브랜드 ${designated.length}곳`}>
+        <p className="mb-3 text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          노션 거래 DB의 <strong>브랜드</strong> 열에서 고르면 됩니다. 상호에 브랜드가
+          없는 가맹점(예: <span className="whitespace-nowrap">판교서일주유소</span> =
+          GS칼텍스)을 알려주는 칸입니다. 한 번만 지정하면 같은 가맹점의 다른 달 거래에도
+          적용되고, 이름 사전보다 우선합니다. 열이 안 보이면 다음 동기화 때 생깁니다.
+        </p>
+        {designated.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            아직 지정한 가맹점이 없습니다.
+          </p>
+        ) : (
+          <ul className="divide-y" style={{ borderColor: 'var(--border)' }}>
+            {designated.map((d) => (
+              <li key={d.merchant} className="flex items-center gap-3 py-2">
+                <span
+                  className="min-w-0 flex-1 truncate text-[13px]"
+                  style={{ color: 'var(--text-primary)' }}
+                >
+                  {d.merchant}
+                </span>
+                <span className="shrink-0 text-[11px]" style={{ color: 'var(--status-good)' }}>
+                  {d.brand}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </Panel>
 

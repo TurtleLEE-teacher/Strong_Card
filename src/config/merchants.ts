@@ -77,6 +77,19 @@ export const BRAND_ALIASES: Record<string, string[]> = {
   GS_CALTEX: ['GS칼텍스'],
   HYUNDAI_OILBANK: ['현대오일뱅크', 'HD현대오일뱅크'],
   S_OIL: ['S-OIL', 'SOIL', '에쓰오일'],
+  /*
+   * 상호에 정유사 이름이 없는 주유소.
+   *
+   * 주유소는 대부분 개인 사업자라 간판 브랜드(폴)와 상호가 따로 논다 —
+   * '판교서일주유소'는 GS칼텍스 폴이지만 이름 어디에도 GS가 없다. 이런
+   * 이름에서 **업종이 주유소라는 것까지는** 확실히 알 수 있고, **어느
+   * 정유사인지는 이름만으로 절대 알 수 없다.** 그래서 둘을 분리한다.
+   *   - 업종만 필요한 혜택(현대 ZERO 생활필수) → 이 브랜드로 걸린다
+   *   - 정유사를 가리는 혜택(탄탄대로 SK·GS만) → MERCHANT_BRAND_OVERRIDES로
+   *     사용자가 폴을 알려줘야 한다. 추측으로 붙이면 S-OIL 주유소에까지
+   *     할인이 붙어 과다 계상된다.
+   */
+  FUEL_UNBRANDED: ['주유소', '셀프주유'],
 
   // 전기차 충전
   EV_CHARGE_ENVIRONMENT: ['환경부전기차충전', '한국환경공단'],
@@ -266,7 +279,12 @@ export const BRAND_GROUPS = {
   DEPARTMENT: [
     'SHINSEGAE_DEPT', 'LOTTE_DEPT', 'HYUNDAI_DEPT', 'GALLERIA', 'AKPLAZA', 'STARFIELD',
   ],
-  FUEL: ['SK_ENERGY', 'GS_CALTEX', 'HYUNDAI_OILBANK', 'S_OIL', 'ALTTEUL'],
+  /*
+   * 주유 **업종** 전체. 정유사를 가리지 않는 혜택에만 쓴다(현대 ZERO 생활필수).
+   * FUEL_UNBRANDED가 들어 있으므로, 정유사를 열거하는 약관에는 쓰면 안 된다 —
+   * 그런 카드는 TT_FUEL처럼 브랜드를 직접 적는다.
+   */
+  FUEL: ['SK_ENERGY', 'GS_CALTEX', 'HYUNDAI_OILBANK', 'S_OIL', 'ALTTEUL', 'FUEL_UNBRANDED'],
   TRANSIT: ['KORAIL', 'SRT', 'TMONEY', 'KAKAO_T', 'UBER_TAXI', 'ITAXI'],
   TELECOM: ['SKT', 'KT', 'LGU', 'ALDDLE_PHONE'],
   /** OTT·음악·도서 등 정기결제 구독 */
@@ -341,6 +359,25 @@ const BUSINESS_FORMS = [
   '(주)', '（주）', '㈜', '(유)', '(사)', '(재)',
 ];
 
+/**
+ * 이름만으로는 브랜드를 알 수 없는 **개별 가맹점** → 브랜드 확정.
+ *
+ * 별칭 사전(BRAND_ALIASES)은 "이 문자열이 그 브랜드를 가리킨다"는 일반 규칙이다.
+ * 여기는 다르다 — "이 가게가 그 브랜드다"라는 **사용자가 직접 가서 보고 아는
+ * 사실**을 적는다. 자영 주유소·프랜차이즈 가맹점이 상호를 따로 쓰는 경우가
+ * 그렇고, 사전을 아무리 키워도 맞힐 수 없다.
+ *
+ * 적어 두지 않으면 그 가맹점은 영원히 '미분류'로 남아 혜택 판정에서 빠진다
+ * (실적 금액에는 그대로 들어간다 — 혜택만 못 받는다).
+ *
+ * 값은 BRAND_ALIASES의 브랜드 키여야 한다. 오타는 아래 테스트가 잡는다.
+ */
+export const MERCHANT_BRAND_OVERRIDES: Record<string, string> = {
+  // 판교 서일주유소 — 상호에 없지만 GS칼텍스 폴이다 (사용자 확인, 2026-08)
+  판교서일주유소: 'GS_CALTEX',
+  서일주유소: 'GS_CALTEX',
+};
+
 /** 별칭 → 브랜드 키 역인덱스 (모듈 로드 시 1회 생성) */
 const ALIAS_TO_BRAND: Map<string, string> = (() => {
   const map = new Map<string, string>();
@@ -348,6 +385,11 @@ const ALIAS_TO_BRAND: Map<string, string> = (() => {
     for (const alias of aliases) {
       map.set(normalizeMerchant(alias), brand);
     }
+  }
+  // 개별 가맹점 지정이 일반 별칭을 이긴다. '서일주유소'는 일반 규칙으로는
+  // FUEL_UNBRANDED지만, 폴을 아는 이상 GS칼텍스로 봐야 맞다.
+  for (const [merchant, brand] of Object.entries(MERCHANT_BRAND_OVERRIDES)) {
+    map.set(normalizeMerchant(merchant), brand);
   }
   return map;
 })();
@@ -376,6 +418,14 @@ export function normalizeMerchant(raw: string): string {
   s = s.replace(/[\s*_\-.,/\\|#]/g, '');
 
   return s.toUpperCase();
+}
+
+/**
+ * 브랜드 키를 사람이 읽는 이름으로. 첫 별칭이 대표 표기다.
+ * 화면에 'GS_CALTEX'가 그대로 나가면 앱이 내부 사정을 떠드는 꼴이 된다.
+ */
+export function brandDisplayName(brand: string): string {
+  return BRAND_ALIASES[brand]?.[0] ?? brand;
 }
 
 /**

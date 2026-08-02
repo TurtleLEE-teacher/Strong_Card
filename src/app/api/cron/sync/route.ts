@@ -7,7 +7,11 @@ import { currentMonthKey } from '@/lib/date';
 import { assertCronAuthorized } from '@/lib/cron';
 import { buildBenefitAlert } from '@/lib/alerts/rules';
 import { sendAlert } from '@/lib/push';
-import { fetchTransactionsForMonth, writeDerivedFields } from '@/lib/notion/transactions';
+import {
+  ensureBrandProperty,
+  fetchTransactionsForMonth,
+  writeDerivedFields,
+} from '@/lib/notion/transactions';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -29,13 +33,23 @@ export async function POST(request: Request) {
   const month = currentMonthKey();
 
   try {
-    const transactions = await fetchTransactionsForMonth(month);
-    const snapshots = buildAllSnapshots(ACTIVE_CARDS, transactions, month);
-
     let updated = 0;
     let notified = 0;
     let unmapped = 0;
     const errors: string[] = [];
+
+    // 브랜드 열이 없으면 여기서 깔린다. 사용자가 노션 화면에서 바로 고를 수
+    // 있어야 하는 열이라, 만들어지기 전까지는 기능이 없는 것과 같다.
+    let brandPropertyCreated = false;
+    try {
+      brandPropertyCreated = await ensureBrandProperty();
+    } catch (e) {
+      // 열 하나 못 만들었다고 동기화 전체를 멈출 이유는 없다.
+      errors.push(`ensure-brand-property: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    const transactions = await fetchTransactionsForMonth(month);
+    const snapshots = buildAllSnapshots(ACTIVE_CARDS, transactions, month);
 
     for (const snapshot of snapshots) {
       const card = CARDS_BY_ID[snapshot.cardId];
@@ -112,6 +126,7 @@ export async function POST(request: Request) {
       updated,
       notified,
       unmapped,
+      brandPropertyCreated,
       errors: errors.slice(0, 20),
     });
   } catch (e) {
