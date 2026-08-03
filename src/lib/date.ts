@@ -26,6 +26,38 @@ export function currentMonthKey(now: Date = new Date()): MonthKey {
   return toMonthKey(now.toISOString());
 }
 
+/**
+ * 'YYYY-MM' 형식이면서 달이 1~12인지.
+ *
+ * 월 키가 URL로 들어오기 시작하면서 필요해졌다. 막지 않으면 '2026-13'이
+ * 그대로 monthRangeUtc로 흘러가 `Date.UTC(2026, 12, 1)`이 2027년 1월로
+ * 조용히 넘어간다 — 화면은 멀쩡히 뜨는데 엉뚱한 달을 보여준다.
+ */
+export function isMonthKey(value: string): boolean {
+  if (!/^\d{4}-\d{2}$/.test(value)) return false;
+  const month = Number(value.slice(5));
+  return month >= 1 && month <= 12;
+}
+
+/**
+ * 아직 오지 않은 달인가.
+ *
+ * 'YYYY-MM'은 자릿수가 고정이라 문자열 비교가 곧 시간 순서다.
+ * Date로 바꿔 비교하면 월 경계에서 KST 오프셋을 또 신경 써야 한다.
+ */
+export function isFutureMonth(month: MonthKey, now: Date = new Date()): boolean {
+  return month > currentMonthKey(now);
+}
+
+/**
+ * 과거로 거슬러 올라갈 수 있는 한계.
+ *
+ * 이 앱은 노션에 쌓인 거래로만 계산한다. 노션에 아무것도 없는 달까지
+ * 이전 버튼을 열어 두면 "0원짜리 달"이 무한히 이어지는데, 그건 실적이
+ * 0이라는 뜻이 아니라 데이터가 없다는 뜻이라 오해만 산다.
+ */
+export const EARLIEST_MONTH: MonthKey = '2026-06';
+
 /** 'YYYY-MM' → 직전 달 */
 export function previousMonthKey(month: MonthKey): MonthKey {
   const [y, m] = month.split('-').map(Number);

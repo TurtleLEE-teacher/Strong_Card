@@ -72,6 +72,49 @@ describe('Trendy 할인을 받은 거래는 실적에서 빠진다', () => {
     expect(snap.currentSpend).toBe(200_000);
   });
 
+  it('주유 6만원은 할인을 받고도 실적 6만원으로 남는다', () => {
+    /*
+     * 약관의 이용실적 제외 대상은 'Trendy서비스 받은 이용건'뿐이다.
+     * 주유는 Daily 서비스라 여기 해당하지 않는다.
+     *
+     * 같은 6만원인데 어디서 쓰느냐로 실적 기여가 정반대가 되는 지점이라,
+     * 룰을 손대다 주유를 excludeBenefitedGroups에 잘못 넣으면 실적이
+     * 조용히 6만원씩 깎인다. 그걸 여기서 막는다.
+     */
+    const snap = buildSnapshot(
+      card,
+      [
+        tx('아무데나', 900_000, '2026-06-15'), // 지난달 → 80만 구간
+        tx('SK에너지 방배주유소', 60_000, '2026-07-04'),
+      ],
+      '2026-07',
+    );
+
+    // 리터당 100원 → 기준유가 1,700원/ℓ 환산으로 할인은 붙는다
+    const transit = snap.benefitUsage.find((u) => u.capGroup === 'tt-daily-transit')!;
+    expect(transit.used).toBe(Math.floor(60_000 * (100 / 1_700)));
+
+    // 그런데 실적은 6만원 그대로다 — 한 푼도 빠지지 않는다
+    expect(snap.currentSpend).toBe(60_000);
+    expect(snap.excludedSpend).toBe(0);
+    expect(snap.exclusions).toHaveLength(0);
+  });
+
+  it('같은 6만원이라도 Trendy에서 쓰면 실적이 0원이 된다', () => {
+    // 주유 건과 나란히 두어야 이 차이가 규칙임을 알 수 있다.
+    const snap = buildSnapshot(
+      card,
+      [
+        tx('아무데나', 900_000, '2026-06-15'),
+        tx('헤어살롱 청담', 60_000, '2026-07-04'),
+      ],
+      '2026-07',
+    );
+    expect(snap.currentSpend).toBe(0);
+    expect(snap.excludedSpend).toBe(60_000);
+    expect(snap.exclusions.find((e) => e.verdict === '제외-혜택')?.amount).toBe(60_000);
+  });
+
   it('할인이 0원이면 실적에서 빼지 않는다', () => {
     // 실적 미달(구간 0)이라 Trendy 한도가 0 → 할인이 안 붙는다.
     // 할인을 못 받았으면 실적에서 뺄 이유도 없다.

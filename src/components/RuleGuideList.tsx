@@ -38,6 +38,20 @@ export function RuleGuideList({ guides }: { guides: RuleGuide[] }) {
               {g.conditions.join(' · ')}
             </p>
           )}
+
+          {/*
+            결제하기 전에 알아야 뜻이 있는 한 줄이다. 20% 할인을 받는 대신
+            그 결제액이 다음 달 실적에서 통째로 빠지므로, 구간이 빠듯한
+            달에는 이 카드를 안 쓰는 게 이득일 수 있다.
+          */}
+          {g.excludesPerformanceSpend && (
+            <p
+              className="mt-1 text-[10px] leading-relaxed"
+              style={{ color: 'var(--status-serious)' }}
+            >
+              ⚠ 이 할인을 받으면 결제액 전체가 다음 달 실적에서 빠집니다
+            </p>
+          )}
         </li>
       ))}
     </ul>

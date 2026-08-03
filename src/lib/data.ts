@@ -19,7 +19,16 @@ export interface DashboardData {
   snapshots: CardMonthlySnapshot[];
   unmapped: Transaction[];
   transactions: Transaction[];
-  daysRemaining: number;
+  /**
+   * 이번 달이 끝나기까지 남은 일수.
+   *
+   * **지난달을 보고 있으면 0이 아니라 null이다.** 0은 '오늘이 말일'이라는
+   * 뜻이라 화면이 지난 7월을 열어 놓고 "오늘이 말일", "3일 남음" 같은
+   * 재촉을 하게 된다. 이미 끝난 달에는 남은 날이라는 개념이 없다.
+   */
+  daysRemaining: number | null;
+  /** 지금 이 달을 보고 있는가. 월말 경고·재촉은 이때만 뜻이 있다. */
+  isCurrentMonth: boolean;
   /**
    * 이 데이터를 Notion에서 읽어온 시각 (UTC ISO).
    *
@@ -36,7 +45,8 @@ export interface DashboardData {
 
 export async function getDashboardData(month?: MonthKey): Promise<DashboardData> {
   const targetMonth = month ?? currentMonthKey();
-  const daysRemaining = daysRemainingInMonth();
+  const isCurrentMonth = targetMonth === currentMonthKey();
+  const daysRemaining = isCurrentMonth ? daysRemainingInMonth() : null;
 
   let transactions: Transaction[];
   let isDemo = false;
@@ -70,6 +80,7 @@ export async function getDashboardData(month?: MonthKey): Promise<DashboardData>
     unmapped: findUnmappedTransactions(transactions, targetMonth),
     transactions,
     daysRemaining,
+    isCurrentMonth,
     fetchedAt: new Date().toISOString(),
     isDemo,
     error,

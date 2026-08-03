@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ACTIVE_CARDS, CARDS_BY_ID } from '@/config/cards';
 import { PushSetup } from '@/components/PushSetup';
+import { excludesSpendFromPerformance } from '@/lib/engine/performance';
 import { getDashboardData } from '@/lib/data';
 import { dateTimeShort, won } from '@/lib/format';
 import { previousMonthKey } from '@/lib/date';
@@ -136,6 +137,51 @@ export default async function SettingsPage() {
           <strong>월을 못 박는 이유:</strong> &#39;전월실적&#39;으로 넣으면 같은 값이 달이 바뀔
           때마다 다른 달을 뜻하게 되어 조용히 틀려집니다. 월을 적어 두면 그 달 화면에서만
           쓰이고, 다음 달은 알아서 다음 값을 찾습니다.
+        </p>
+      </Panel>
+
+      {/*
+        "혜택을 받으면 실적에서 빠지는 결제"가 어디인지 한 자리에 모은다.
+
+        이 규칙은 카드마다 다르고, 같은 카드 안에서도 영역마다 다르다
+        (탄탄대로는 Trendy만 빠지고 Daily는 그대로 인정된다). 화면 여기저기
+        흩어져 있으면 "내 주유 6만원은 실적에 들어간 건가"에 답할 데가 없다.
+      */}
+      <Panel title="혜택을 받으면 실적에서 빠지는 결제">
+        <p className="mb-3 text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          아래 영역에서 할인을 받으면 <strong>결제액 전체</strong>가 다음 달 실적에서 빠집니다.
+          할인은 그대로 받습니다 — 빠지는 건 실적뿐입니다. 여기 없는 영역은 할인을 받아도
+          결제액이 실적에 그대로 인정됩니다.
+        </p>
+        <ul className="space-y-2">
+          {ACTIVE_CARDS.map((card) => {
+            const excluded = card.benefits.filter((rule) =>
+              excludesSpendFromPerformance(card, rule),
+            );
+            return (
+              <li key={card.id} className="flex items-start justify-between gap-3 text-xs">
+                <span className="shrink-0" style={{ color: 'var(--text-secondary)' }}>
+                  {card.shortName}
+                </span>
+                <span className="min-w-0 text-right">
+                  {excluded.length === 0 ? (
+                    <span className="text-[11px]" style={{ color: 'var(--status-good)' }}>
+                      전부 실적 인정
+                    </span>
+                  ) : (
+                    <span className="text-[11px]" style={{ color: 'var(--status-serious)' }}>
+                      {excluded.map((r) => r.label).join(' · ')}
+                    </span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mt-3 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          근거는 각 카드 약관의 <strong>이용실적 제외 대상</strong> 문구입니다. 탄탄대로는
+          &#39;Trendy서비스 받은 이용건&#39;만 제외 대상이라, 같은 카드라도 주유·대중교통·커피
+          같은 Daily 서비스 할인은 결제액이 실적에 그대로 남습니다.
         </p>
       </Panel>
 

@@ -14,9 +14,17 @@ import type { MeterSeverity } from '@/components/Meter';
 export function performanceSeverity(
   ratio: number,
   atTopTier: boolean,
-  daysRemaining: number,
+  /**
+   * 이번 달이 끝나기까지 남은 일수. **null이면 이미 마감된 달**이다.
+   *
+   * 0을 넘기면 '오늘이 말일'로 읽혀 지난달 화면의 실적 바가 전부 빨갛게
+   * 뜬다. 끝난 달에 대고 "지금 더 쓰라"고 말하는 색인데, 그때 할 수 있는
+   * 일은 아무것도 없다.
+   */
+  daysRemaining: number | null,
 ): MeterSeverity {
   if (atTopTier || ratio >= 1) return 'good';
+  if (daysRemaining === null) return 'accent';
   if (daysRemaining <= 3 && ratio < 0.9) return 'critical';
   if (daysRemaining <= 7 && ratio < 0.9) return 'warning';
   return 'accent';

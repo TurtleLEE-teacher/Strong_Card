@@ -8,6 +8,14 @@ import { guidesFor } from '@/lib/rule-guide';
 import { performanceSeverity } from '@/lib/severity';
 import { monthShort, won, wonShort } from '@/lib/format';
 import { nextMonthKey, previousMonthKey } from '@/lib/date';
+import {
+  exhaustedAreaCount,
+  isFullyEarned,
+  openUsage,
+  remainingBenefit,
+  visibleUsage,
+} from '@/lib/card-status';
+import { cardHref } from '@/lib/routes';
 
 /**
  * 카드 위젯은 두 가지 형태로 나뉜다.
@@ -33,12 +41,30 @@ import { nextMonthKey, previousMonthKey } from '@/lib/date';
 interface Props {
   card: Card;
   snapshot: CardMonthlySnapshot;
-  /** 이번 달 남은 일수. 실적 미달 경고 색을 정하는 데 쓴다. */
-  daysRemaining: number;
+  /**
+   * 이번 달 남은 일수. 실적 미달 경고 색을 정하는 데 쓴다.
+   * **지난달을 보고 있으면 null** — 끝난 달에는 재촉할 것이 없다.
+   */
+  daysRemaining: number | null;
 }
 
 export function CardWidget({ card, snapshot, daysRemaining }: Props) {
   const seriesColor = `var(--series-${card.slot})`;
+
+  /*
+   * 한도 있는 영역을 전부 소진한 카드.
+   *
+   * 이 카드는 이번 달에 할 일이 끝났다 — 더 써도 혜택이 안 붙는다. 목록에서
+   * 남은 카드들과 똑같이 보이면 매번 여섯 장을 다 열어 봐야 하므로, 색을
+   * 빼고 배지를 붙여 **눈이 그냥 지나가게** 만든다. 지우지는 않는다:
+   * 얼마를 받았는지가 이 화면의 본래 숫자이고, 사라지면 합계와 목록이
+   * 어긋나 보인다.
+   */
+  const done = isFullyEarned(snapshot);
+
+  // 지난달 위젯에서 카드를 누르면 그 달의 상세로 가야 한다. 달을 안 실으면
+  // 6월 대시보드에서 카드를 눌렀는데 이번 달 상세가 열린다.
+  const detailHref = cardHref(card.id, snapshot.month);
 
   return (
     <article
@@ -52,17 +78,33 @@ export function CardWidget({ card, snapshot, daysRemaining }: Props) {
       }}
     >
       {/* 카드 색 마커. 폭을 꽉 채우면 '100% 찬 바'로 읽히므로 짧게 둔다 —
-          이 화면의 가로 막대는 전부 데이터다. 짧은 조각은 탭 표시로 읽힌다. */}
-      <div aria-hidden style={{ height: 3, width: 36, background: seriesColor }} />
+          이 화면의 가로 막대는 전부 데이터다. 짧은 조각은 탭 표시로 읽힌다.
+          다 받은 카드는 회색으로 — 색이 곧 '아직 볼 것이 있다'는 신호다. */}
+      <div
+        aria-hidden
+        style={{ height: 3, width: 36, background: done ? 'var(--border)' : seriesColor }}
+      />
 
       <div className="p-4 sm:p-5">
-        <Header card={card} snapshot={snapshot} seriesColor={seriesColor} />
+        <Header
+          card={card}
+          snapshot={snapshot}
+          seriesColor={seriesColor}
+          done={done}
+          detailHref={detailHref}
+        />
 
         {card.performance.required && (
           <PerformanceSection snapshot={snapshot} card={card} daysRemaining={daysRemaining} />
         )}
 
-        <BenefitSection card={card} snapshot={snapshot} seriesColor={seriesColor} />
+        <BenefitSection
+          card={card}
+          snapshot={snapshot}
+          seriesColor={seriesColor}
+          done={done}
+          detailHref={detailHref}
+        />
       </div>
     </article>
   );
@@ -86,10 +128,14 @@ function Header({
   card,
   snapshot,
   seriesColor,
+  done,
+  detailHref,
 }: {
   card: Card;
   snapshot: CardMonthlySnapshot;
   seriesColor: string;
+  done: boolean;
+  detailHref: string;
 }) {
   const sourceMonth = monthShort(previousMonthKey(snapshot.month));
   const basis = !card.performance.required
@@ -104,7 +150,7 @@ function Header({
     <header>
       <div className="flex items-start justify-between gap-3">
         {/* 카드사를 앞세운다. 지갑에서 카드를 고를 때 먼저 보는 게 카드사다. */}
-        <Link href={`/card/${card.id}`} className="flex min-w-0 items-center gap-2.5 group">
+        <Link href={detailHref} className="flex min-w-0 items-center gap-2.5 group">
           <CardFace issuer={card.issuer} last4={card.last4} seriesColor={seriesColor} />
           <span className="min-w-0">
             <span
@@ -121,7 +167,12 @@ function Header({
             </span>
           </span>
         </Link>
-        {card.performance.required ? <TierBadge snapshot={snapshot} /> : <Chip>무실적</Chip>}
+        <span className="flex shrink-0 items-center gap-1.5">
+          {/* '다 받음'이 먼저다. 이 카드에 대해 지금 알아야 할 게 그것뿐일 때
+              구간 배지는 배경 정보다. */}
+          {done && <Chip tone="done">✓ 다 받음</Chip>}
+          {card.performance.required ? <TierBadge snapshot={snapshot} /> : <Chip>무실적</Chip>}
+        </span>
       </div>
 
       <div className="mt-3 flex items-end justify-between gap-3">
@@ -150,19 +201,27 @@ function Chip({
   tone = 'neutral',
 }: {
   children: React.ReactNode;
-  tone?: 'neutral' | 'critical';
+  tone?: 'neutral' | 'critical' | 'done';
 }) {
+  // 'done'은 좋은 상태다 — 받을 수 있는 걸 다 받았다는 뜻이라 경고색을
+  // 쓰면 정반대로 읽힌다. 체크 표시를 함께 두어 색만으로 뜻을 나르지 않는다.
+  const style =
+    tone === 'critical'
+      ? {
+          background: 'color-mix(in oklab, var(--status-critical) 12%, var(--surface-alt))',
+          color: 'var(--status-critical)',
+        }
+      : tone === 'done'
+        ? {
+            background: 'color-mix(in oklab, var(--status-good) 14%, var(--surface-alt))',
+            color: 'var(--status-good)',
+          }
+        : { background: 'var(--surface-alt)', color: 'var(--text-secondary)' };
+
   return (
     <span
-      className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
-      style={
-        tone === 'critical'
-          ? {
-              background: 'color-mix(in oklab, var(--status-critical) 12%, var(--surface-alt))',
-              color: 'var(--status-critical)',
-            }
-          : { background: 'var(--surface-alt)', color: 'var(--text-secondary)' }
-      }
+      className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+      style={style}
     >
       {children}
     </span>
@@ -222,7 +281,7 @@ function PerformanceSection({
 }: {
   card: Card;
   snapshot: CardMonthlySnapshot;
-  daysRemaining: number;
+  daysRemaining: number | null;
 }) {
   const { currentSpend, nextTier, reachedTier, remainingToNextTier } = snapshot;
 
@@ -262,7 +321,7 @@ function PerformanceSection({
           ratio={ratio}
           severity={severity}
           ticks={ticks}
-          ariaLabel={`이번 달 실적 ${won(currentSpend)}, 목표 ${won(goal)}`}
+          ariaLabel={`${monthShort(snapshot.month)} 실적 ${won(currentSpend)}, 목표 ${won(goal)}`}
         />
 
         <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
@@ -274,7 +333,7 @@ function PerformanceSection({
               <strong style={{ color: 'var(--text-primary)' }}>{nextTier.label}</strong> 구간까지{' '}
               <strong style={{ color: 'var(--text-primary)' }}>{won(remainingToNextTier)}</strong>{' '}
               남음
-              {daysRemaining <= 7 && ` · ${daysRemaining}일 남음`}
+              {daysRemaining !== null && daysRemaining <= 7 && ` · ${daysRemaining}일 남음`}
             </>
           )}
         </p>
@@ -294,14 +353,16 @@ function BenefitSection({
   card,
   snapshot,
   seriesColor,
+  done,
+  detailHref,
 }: {
   card: Card;
   snapshot: CardMonthlySnapshot;
   seriesColor: string;
+  done: boolean;
+  detailHref: string;
 }) {
-  const allUsage = snapshot.benefitUsage
-    .filter((u) => u.used > 0 || (u.cap !== null && u.cap > 0))
-    .sort((a, b) => b.used - a.used);
+  const allUsage = visibleUsage(snapshot).sort((a, b) => b.used - a.used);
 
   // 한도가 있는 영역은 전부 보여준다. 카드사 앱도 영역별로 나눠 보여주고,
   // 그게 이 화면의 핵심 정보다. 잘라내면 "어느 영역이 남았나"에 답을 못 한다.
@@ -316,22 +377,27 @@ function BenefitSection({
 
   // 이 카드로 이번 달 더 받을 수 있는 금액. "어느 카드를 더 쓸까"에
   // 바로 답하는 숫자라 영역 목록의 요약으로 올린다.
-  const headroom = capped.reduce((sum, u) => sum + Math.max(0, (u.cap ?? 0) - u.used), 0);
-  const exhausted = capped.filter((u) => (u.ratio ?? 0) >= 1).length;
+  //
+  // 한도가 **열려 있는** 영역만 센다. 실적 미달로 한도가 0인 영역까지 세면
+  // "0원 중 0원 소진"이 성립해서, 혜택을 한 푼도 못 받는 카드에 '모든 영역
+  // 소진'이라고 적히게 된다.
+  const headroom = remainingBenefit(snapshot);
+  const exhausted = exhaustedAreaCount(snapshot);
+  const hasOpenArea = openUsage(snapshot).length > 0;
 
   return (
     <Block
       title="혜택 영역"
       aside={
-        capped.length > 0 ? (
+        hasOpenArea ? (
           <p className="shrink-0 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-            {headroom > 0 ? (
+            {done ? (
+              <span style={{ color: 'var(--status-good)' }}>모든 영역 소진 · 다 받음</span>
+            ) : (
               <>
                 <span className="tabular">{won(headroom)}</span> 더 받을 수 있음
                 {exhausted > 0 && ` · ${exhausted}개 소진`}
               </>
-            ) : (
-              '모든 영역 소진'
             )}
           </p>
         ) : undefined
@@ -353,7 +419,7 @@ function BenefitSection({
         </ul>
 
         <Link
-          href={`/card/${card.id}`}
+          href={detailHref}
           className="mt-3 inline-block text-[11px] hover:underline"
           style={{ color: 'var(--text-muted)' }}
         >
