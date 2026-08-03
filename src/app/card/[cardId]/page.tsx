@@ -13,7 +13,7 @@ import { brandDisplayName, resolveBrand } from '@/config/merchants';
 import { guidesFor } from '@/lib/rule-guide';
 import { performanceSeverity } from '@/lib/severity';
 import { dateTimeShort, monthLabel, monthShort, won, wonShort } from '@/lib/format';
-import { nextMonthKey, previousMonthKey } from '@/lib/date';
+import { byRecentFirst, nextMonthKey, previousMonthKey, toMonthKey } from '@/lib/date';
 import type { CardId } from '@/lib/types';
 
 export const revalidate = 300;
@@ -37,15 +37,9 @@ export default async function CardDetailPage({
   if (!snapshot) notFound();
 
   const benefitByTx = new Map(snapshot.appliedBenefits.map((b) => [b.transactionId, b]));
-  const monthTx = transactions
-    .filter((tx) => tx.cardId === card.id)
-    .filter((tx) => {
-      const key = new Date(new Date(tx.approvedAt).getTime() + 9 * 3600_000)
-        .toISOString()
-        .slice(0, 7);
-      return key === month;
-    })
-    .sort((a, b) => new Date(b.approvedAt).getTime() - new Date(a.approvedAt).getTime());
+  const monthTx = byRecentFirst(
+    transactions.filter((tx) => tx.cardId === card.id && toMonthKey(tx.approvedAt) === month),
+  );
 
   // 이 카드로 결제했지만 다른 카드가 더 나았을 건들
   const missed = findMissedBenefits(ACTIVE_CARDS, snapshots, monthTx);
@@ -59,22 +53,28 @@ export default async function CardDetailPage({
   const txById = new Map(monthTx.map((tx) => [tx.id, tx]));
 
   /*
-   * 이번 달에 **실제로 혜택이 붙은 결제**만 금액 순으로 모은다.
+   * 이번 달에 **실제로 혜택이 붙은 결제**만 최신순으로 모은다.
    *
    * 예전에는 이걸 보려면 혜택 영역을 하나씩 펼치거나, 받은 건과 못 받은
    * 건이 섞인 전체 거래 목록을 눈으로 훑어야 했다. "이번 달에 뭘로 얼마를
    * 받았나"는 이 화면에서 가장 먼저 답해야 할 질문인데 어디에도 한
    * 덩어리로 있지 않았다.
    *
+   * 정렬은 금액이 아니라 시간이다. 이 앱은 결제 직후에 열린다 — 그때 확인할
+   * 것은 "방금 그 결제에 혜택이 붙었나" 하나뿐인데, 금액순이면 방금 받은
+   * 500원이 목록 맨 아래에 처박힌다. 큰 혜택을 찾는 건 아래 '혜택별 소진
+   * 현황'이 답한다.
+   *
    * 취소로 회수된 건(음수)도 남긴다 — 합계가 왜 줄었는지 설명해야 한다.
    */
-  const earned = snapshot.appliedBenefits
-    .filter((b) => b.netAmount !== 0)
-    .flatMap((benefit) => {
-      const tx = txById.get(benefit.transactionId);
-      return tx ? [{ benefit, tx }] : [];
-    })
-    .sort((a, b) => b.benefit.netAmount - a.benefit.netAmount);
+  const earned = byRecentFirst(
+    snapshot.appliedBenefits
+      .filter((b) => b.netAmount !== 0)
+      .flatMap((benefit) => {
+        const tx = txById.get(benefit.transactionId);
+        return tx ? [{ benefit, tx, approvedAt: tx.approvedAt }] : [];
+      }),
+  );
   /*
    * 브랜드를 모르는 채로 혜택도 못 받은 가맹점.
    *
@@ -106,7 +106,7 @@ export default async function CardDetailPage({
     const ruleIds = usage.capGroup
       ? new Set(card.benefits.filter((r) => r.capGroup === usage.capGroup).map((r) => r.id))
       : new Set([usage.ruleId]);
-    return snapshot.appliedBenefits
+    const rows = snapshot.appliedBenefits
       // 0원이 된 건도 남긴다 — '왜 혜택을 못 받았나'가 오히려 더 궁금한
       // 정보이고, 빼면 위의 '·N건' 표기와 목록 길이가 어긋난다.
       .filter((b) => ruleIds.has(b.ruleId))
@@ -124,8 +124,8 @@ export default async function CardDetailPage({
             }
           : null;
       })
-      .filter((x): x is UsageContribution => x !== null)
-      .sort((a, b) => new Date(b.approvedAt).getTime() - new Date(a.approvedAt).getTime());
+      .filter((x): x is UsageContribution => x !== null);
+    return byRecentFirst(rows);
   };
 
   return (
@@ -286,9 +286,20 @@ export default async function CardDetailPage({
         놓친 혜택 — 이 카드로 결제했지만 다른 카드가 더 나았을 건.
         추정치임을 반드시 밝힌다. 실제로 다른 카드를 썼다면 그 카드의
         한도 소진 순서도 달라졌을 테니 이 숫자가 그대로 실현되지는 않는다.
+
+        이 화면에서 여기만 최신순이 아니다 — 놓친 금액이 큰 순으로 자르기
+        때문이다. 그 사실을 제목 아래에 밝혀 둔다. 밝히지 않으면 위아래
+        패널과 순서가 달라 정렬이 깨진 것처럼 읽힌다.
       */}
       {missed.length > 0 && (
-        <Panel title={`놓친 혜택 (추정) ${won(missedTotal)}`}>
+        <Panel
+          title={`놓친 혜택 (추정) ${won(missedTotal)}`}
+          subtitle={
+            missed.length > 1
+              ? `놓친 금액이 큰 순${missed.length > 10 ? ` · ${missed.length}건 중 10건` : ''}`
+              : undefined
+          }
+        >
           <ul className="divide-y" style={{ borderColor: 'var(--border)' }}>
             {missed.slice(0, 10).map((m) => (
               <li key={m.transactionId} className="flex items-center gap-3 py-2.5">

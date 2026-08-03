@@ -142,6 +142,26 @@ export function isRuleEffectiveInMonth(
   return true;
 }
 
+/**
+ * 시각을 가진 무엇이든 **최신이 위로** 오게 정렬한다.
+ *
+ * 화면에 뿌리는 이력 목록은 전부 이 함수를 거친다. 목록마다 각자 비교식을
+ * 쓰면 한 화면 안에서 어떤 패널은 최신순, 어떤 패널은 금액순·입력순으로
+ * 갈리고, 그 순간 사용자는 "방금 쓴 결제가 어디 있지"를 매번 눈으로 찾아야
+ * 한다. 이력의 기본 정렬은 시간이고, 그 예외는 패널 제목에 밝힌다.
+ *
+ * 원본 배열을 건드리지 않는다 — 노션에서 받은 순서(오래된 것부터)를 그대로
+ * 쓰는 계산 코드가 따로 있다.
+ *
+ * 같은 시각이 여럿이면 받은 순서를 유지한다(Array#sort는 안정 정렬). 노션
+ * `사용 일시`가 분 단위까지 있어 실제로 겹치는 일은 드물다.
+ */
+export function byRecentFirst<T extends { approvedAt: string }>(items: readonly T[]): T[] {
+  return [...items].sort(
+    (a, b) => new Date(b.approvedAt).getTime() - new Date(a.approvedAt).getTime(),
+  );
+}
+
 /** 룰의 유효기간(effectiveFrom/Until)이 해당 거래일에 유효한지 */
 export function isRuleEffective(
   isoUtc: string,
