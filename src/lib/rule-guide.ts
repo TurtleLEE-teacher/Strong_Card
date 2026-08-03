@@ -1,5 +1,6 @@
 import type { BenefitRule, BenefitUsage, Card } from '@/lib/types';
 import { BRAND_ALIASES } from '@/config/merchants';
+import { excludesSpendFromPerformance } from '@/lib/engine/performance';
 import { won, wonShort, percent } from '@/lib/format';
 
 /**
@@ -40,6 +41,14 @@ export interface RuleGuide {
   } | null;
   /** 추정치인 규칙인지 */
   estimated: boolean;
+  /**
+   * 이 할인을 받으면 **결제액 전체가 다음 달 실적에서 빠지는가.**
+   *
+   * 탄탄대로 Trendy가 그렇다. 이 사실은 결제하기 **전에** 알아야 뜻이 있는데
+   * (그때만 다른 카드를 고를 수 있다), 지금까지는 실적 제외 내역 패널에서
+   * 사후에만 볼 수 있었다. 혜택 설명 안에 넣어 결제 직전 화면에 띄운다.
+   */
+  excludesPerformanceSpend: boolean;
   notes?: string;
 }
 
@@ -136,6 +145,7 @@ export function guidesFor(
           }
         : null,
       estimated: rule.confidence === 'estimated',
+      excludesPerformanceSpend: excludesSpendFromPerformance(card, rule),
       notes: rule.notes,
     };
   });

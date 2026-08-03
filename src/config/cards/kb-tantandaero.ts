@@ -28,6 +28,21 @@ import { COMMON_EXCLUSIONS } from '../exclusions';
  *    40만/80만 구간이 걸린 문제라 performance.excludeBenefitedGroups로
  *    반영한다. 할인은 그대로 받고, 빠지는 건 실적뿐이다.
  *
+ *    **Daily 서비스는 해당 없다.** 약관의 제외 문구는 'Trendy서비스'만
+ *    가리킨다. 그래서 주유·대중교통·커피·백화점·편의점·마트에서 할인을
+ *    받아도 결제액은 실적에 그대로 남는다.
+ *
+ *      주유 6만원 → 리터당 100원 할인(≈3,500원)을 받고도 실적 6만원 인정
+ *      헤어살롱 6만원 → 20% 할인(12,000원)을 받는 대신 실적 0원
+ *
+ *    같은 6만원인데 실적 기여가 정반대다. 어느 쪽인지는 아래 각 룰의
+ *    `excludesPerformanceSpend` 주석에 못 박아 둔다 — 코드에서 이걸 아는
+ *    유일한 근거가 `excludeBenefitedGroups` 배열 하나라, 룰을 추가하면서
+ *    배열을 안 건드리면 조용히 틀린 실적이 나온다.
+ *
+ *    ⚠️ 무승인 전표(대중교통·택시)는 **다른 이유로** 실적에서 빠진다.
+ *       혜택을 받아서가 아니라 전표 종류가 그래서다. 둘을 섞지 말 것.
+ *
  * 대상 가맹점이 **열거식**이다. 일반 브랜드 묶음을 쓰면 과다 계상된다.
  *   편의점   GS25, CU만            (세븐일레븐·이마트24 제외)
  *   백화점   신세계·롯데·현대만
@@ -83,6 +98,9 @@ export const KB_TANTANDAERO: Card = {
     installmentPolicy: 'full',
     tierConfidence: 'confirmed',
     // Trendy 할인을 받은 거래는 실적에서 통째로 빠진다 (약관 명시).
+    // Daily 서비스(커피·교통·주유·백화점·편의점·마트)는 여기 없다 —
+    // 약관의 제외 대상이 'Trendy서비스'로 한정돼 있기 때문이다.
+    // 넣고 빼는 판단은 반드시 약관 문구 기준으로만 한다.
     excludeBenefitedGroups: ['tt-trendy-beauty', 'tt-trendy-spa'],
     tiers: [
       // 통합 한도를 두지 않는다 — 이 카드는 영역별 한도로만 제어된다.
@@ -182,7 +200,9 @@ export const KB_TANTANDAERO: Card = {
       capPerMonth: DAILY_CAP,
       priority: 20,
       confidence: 'estimated',
-      notes: `리터당 100원 → 기준유가 ${ASSUMED_FUEL_PRICE_PER_L.toLocaleString('ko-KR')}원/ℓ 가정으로 환산. 유가에 따라 달라진다`,
+      // 실적은 그대로 인정된다 — Daily 서비스는 약관의 실적 제외 대상이
+      // 아니다. 6만원 주유는 할인을 받고도 실적 6만원으로 남는다.
+      notes: `리터당 100원 → 기준유가 ${ASSUMED_FUEL_PRICE_PER_L.toLocaleString('ko-KR')}원/ℓ 가정으로 환산. 유가에 따라 달라진다. 실적에는 그대로 인정된다`,
     },
     {
       id: 'tt-daily-dept-cvs',
