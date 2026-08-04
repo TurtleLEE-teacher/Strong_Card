@@ -26,6 +26,25 @@ export interface Alert {
   url: string;
 }
 
+/**
+ * 알림창에서 서로를 **대체할** 알림들의 묶음 키.
+ *
+ * 같은 tag를 단 알림은 기기 알림창에서 앞의 것을 밀어내고 하나만 남는다.
+ * 그게 맞는 알림과 틀린 알림이 갈린다.
+ *
+ *   실적미달 D-7 → D-3 → D-1   같은 얘기의 갱신이다. 셋이 쌓이면 잔소리다.
+ *                              → 카드 단위로 묶어 하나만 남긴다.
+ *
+ *   혜택적용 스타벅스 / 이마트  **서로 다른 결제**다. 묶으면 오후에 세 번
+ *                              긁었는데 알림창에는 마지막 한 건만 남는다.
+ *                              나머지 두 건은 진동 한 번 울리고 사라져서,
+ *                              "알림이 안 온다"로 보인다.
+ *                              → 거래 단위 멱등 키를 그대로 tag로 쓴다.
+ */
+export function notificationTag(alert: Alert): string {
+  return alert.type === '혜택적용' ? alert.key : `${alert.type}:${alert.cardId}`;
+}
+
 /** 실적 미달 경고를 보낼 시점 (월말까지 남은 일수) */
 export const WARNING_DAYS = [7, 3, 1] as const;
 

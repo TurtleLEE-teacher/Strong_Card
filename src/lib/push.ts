@@ -1,7 +1,7 @@
 import 'server-only';
 import webpush from 'web-push';
 
-import type { Alert } from '@/lib/alerts/rules';
+import { notificationTag, type Alert } from '@/lib/alerts/rules';
 import {
   deactivateSubscription,
   fetchActiveSubscriptions,
@@ -69,9 +69,10 @@ export async function sendAlert(alert: Alert): Promise<SendResult> {
     title: alert.title,
     body: alert.body,
     url: alert.url,
-    // 같은 태그의 알림은 알림창에서 서로를 대체한다.
-    // 실적 경고가 D-7, D-3, D-1로 세 번 쌓이는 걸 막는다.
-    tag: `${alert.type}:${alert.cardId}`,
+    // 같은 태그의 알림은 알림창에서 서로를 대체한다. 무엇을 묶고 무엇을
+    // 따로 둘지는 rules.ts가 정한다 — 거래별 혜택 알림까지 묶으면 한 번에
+    // 여러 건을 긁은 날 마지막 한 건만 남는다.
+    tag: notificationTag(alert),
   });
 }
 

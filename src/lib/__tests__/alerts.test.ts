@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CARDS_BY_ID } from '@/config/cards';
 import { buildSnapshot } from '@/lib/engine/snapshot';
-import { buildBenefitAlert, evaluateMonthlyAlerts } from '@/lib/alerts/rules';
+import { buildBenefitAlert, evaluateMonthlyAlerts, notificationTag } from '@/lib/alerts/rules';
 import type { CardId, Transaction } from '@/lib/types';
 
 let seq = 0;
@@ -228,5 +228,51 @@ describe('알림 공통', () => {
       expect(alert.key).toContain('2026-07');
       expect(alert.key).toContain('kb-tantandaero');
     }
+  });
+});
+
+describe('알림창에서 무엇이 무엇을 밀어내는가', () => {
+  /*
+   * 같은 tag를 단 알림은 기기 알림창에서 앞의 것을 대체한다. 이걸 잘못
+   * 묶으면 증상이 "알림이 안 온다"로 나타나는데, 실제로는 발송은 됐고
+   * 알림창에서 서로를 지운 것이라 로그만 봐서는 절대 못 찾는다.
+   */
+  const snapshot = buildSnapshot(
+    tantan,
+    [
+      tx('kb-tantandaero', '아방가르드', 900_000, '06-15'), // 지난달 → 80만 구간
+      tx('kb-tantandaero', '스타벅스 강남점', 30_000, '07-05'),
+      tx('kb-tantandaero', '이마트 성수점', 100_000, '07-06'),
+    ],
+    '2026-07',
+  );
+  const [starbucks, emart] = snapshot.appliedBenefits.filter((b) => b.netAmount > 0);
+
+  it('한 카드에서 두 번 결제하면 알림도 두 개로 남는다', () => {
+    // 예전에는 tag가 '혜택적용:kb-tantandaero'로 같아서, 오후에 세 번
+    // 긁으면 알림창에 마지막 한 건만 남았다.
+    const a = notificationTag(buildBenefitAlert(tantan, snapshot, starbucks.transactionId, '스타벅스')!);
+    const b = notificationTag(buildBenefitAlert(tantan, snapshot, emart.transactionId, '이마트')!);
+    expect(a).not.toBe(b);
+  });
+
+  it('실적 미달 D-7·D-3·D-1은 하나로 합쳐진다', () => {
+    // 이쪽은 같은 얘기의 갱신이라 쌓이면 잔소리가 된다. 일부러 묶는다.
+    const tags = [7, 3, 1].map(
+      (days) =>
+        notificationTag(
+          evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: days }).find(
+            (x) => x.type === '실적미달',
+          )!,
+        ),
+    );
+    expect(new Set(tags).size).toBe(1);
+  });
+
+  it('종류가 다르면 서로를 밀어내지 않는다', () => {
+    const all = evaluateMonthlyAlerts({ card: tantan, snapshot, daysRemaining: 7 });
+    const byType = new Map(all.map((a) => [a.type, notificationTag(a)]));
+    // 실적 경고가 한도 소진 알림을 지우면 안 된다
+    expect(new Set(byType.values()).size).toBe(byType.size);
   });
 });
