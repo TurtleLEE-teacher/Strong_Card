@@ -73,22 +73,32 @@ export function resolveCap(
   return resolved ?? 0;
 }
 
-/** 거래가 이 룰의 매칭 조건에 걸리는지 */
-export function matchesRule(rule: BenefitRule, tx: Transaction): boolean {
-  const { match } = rule;
-
-  // 시각·요일 조건이 있으면 가맹점을 보기 전에 먼저 거른다.
-  // (신한 Discount Plan의 DAY 07~15시 / NIGHT 18~22시, 신한EV 3대마트 주말)
+/**
+ * 승인 시각·요일이 이 룰의 조건에 드는지.
+ *
+ * 가맹점 조건과 **분리해서** 판정한다. 붙여 놓으면 "CU에서 아침에 긁었다"가
+ * 가맹점 조건 실패와 구분되지 않아, 화면이 "대상 가맹점 아님"이라고
+ * 거짓말을 하게 된다. CU는 대상 가맹점이 맞고 시간이 틀렸을 뿐이다.
+ * 그 둘은 사용자가 할 수 있는 일이 정반대다 — 하나는 포기, 하나는
+ * "저녁에 다시 오면 받는다".
+ */
+export function matchesSchedule(rule: BenefitRule, tx: Transaction): boolean {
   if (
     rule.timeWindow &&
     !isWithinHours(tx.approvedAt, rule.timeWindow.startHour, rule.timeWindow.endHour)
   ) {
     return false;
   }
-
   if (rule.daysOfWeek?.length && !rule.daysOfWeek.includes(kstDayOfWeek(tx.approvedAt))) {
     return false;
   }
+  return true;
+}
+
+/** 가맹점(브랜드·키워드·카테고리·결제구분)이 이 룰의 대상인지. 시각·요일은 보지 않는다. */
+export function matchesMerchant(rule: BenefitRule, tx: Transaction): boolean {
+  const { match } = rule;
+
   const hasCondition =
     !!match.paymentKinds?.length ||
     !!match.brands?.length ||
@@ -133,6 +143,11 @@ export function matchesRule(rule: BenefitRule, tx: Transaction): boolean {
   }
 
   return false;
+}
+
+/** 거래가 이 룰의 매칭 조건에 걸리는지 (시각·요일 + 가맹점) */
+export function matchesRule(rule: BenefitRule, tx: Transaction): boolean {
+  return matchesSchedule(rule, tx) && matchesMerchant(rule, tx);
 }
 
 /**
@@ -297,6 +312,18 @@ function firstUnlock(
  */
 export type NoBenefitReason =
   | '대상 가맹점 아님'
+  /**
+   * 가맹점은 맞는데 **승인 시각**이 조건 밖이다.
+   *
+   * '대상 가맹점 아님'과 반드시 갈라야 한다. 신한 Discount Plan 편의점
+   * 할인은 18~22시인데, 아침 9시에 CU에서 긁으면 예전에는 '대상 가맹점
+   * 아님'이라고 떴다. CU는 대상 가맹점이 맞다 — 그 표시를 믿은 사용자는
+   * 앞으로 이 카드를 편의점에서 아예 안 쓰게 된다. 받을 수 있었던 혜택을
+   * 화면이 스스로 포기시키는 셈이다.
+   */
+  | '시간대 아님'
+  /** 가맹점은 맞는데 요일이 조건 밖이다 (신한EV 3대마트는 주말만) */
+  | '요일 아님'
   | '실적 미달로 잠김'
   | '건당 최소금액 미달'
   | '횟수 초과'
@@ -319,6 +346,14 @@ export interface NoBenefitNote {
  * 만난 '아깝게 놓친' 이유를 돌려준다 — 조건만 맞았으면 받았을 혜택이
  * 사용자에게 가장 쓸모 있는 정보다.
  */
+const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** [0,6] → '주말만', 나머지는 '월·수요일만' */
+function describeDays(days: number[]): string {
+  const isWeekend = days.length === 2 && days.includes(0) && days.includes(6);
+  return isWeekend ? '주말만' : `${days.map((d) => DAY_NAMES[d]).join('·')}요일만`;
+}
+
 function explainNoRule(
   card: Card,
   tx: Transaction,
@@ -332,11 +367,25 @@ function explainNoRule(
     .sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
 
   for (const rule of candidates) {
-    // 가맹점·시각·요일이 안 맞으면 애초에 이 룰의 문제가 아니다.
-    if (!matchesRule(rule, tx)) continue;
+    // 가맹점이 안 맞으면 애초에 이 룰의 문제가 아니다.
+    if (!matchesMerchant(rule, tx)) continue;
 
+    // 여기부터는 **가맹점은 맞는** 룰이다. 이 아래에서 걸리는 건 전부
+    // "조건만 맞았으면 받았을 혜택"이고, 사용자가 다음에 뭘 바꾸면 되는지
+    // 알려줄 값어치가 있다.
     if (resolveCap(rule.capPerMonth, appliedTier) === 0) {
       best ??= { reason: '실적 미달로 잠김', ruleLabel: rule.label };
+      continue;
+    }
+    // 실적이 열려 있는데 시각·요일만 어긋난 경우. 다음에 언제 오면 받는지가
+    // 그대로 답이 되므로 조건을 detail에 실어 보낸다.
+    if (!matchesSchedule(rule, tx)) {
+      const outOfHours =
+        rule.timeWindow !== undefined &&
+        !isWithinHours(tx.approvedAt, rule.timeWindow.startHour, rule.timeWindow.endHour);
+      best ??= outOfHours
+        ? { reason: '시간대 아님', ruleLabel: rule.label, detail: `${rule.timeWindow!.label}에만` }
+        : { reason: '요일 아님', ruleLabel: rule.label, detail: describeDays(rule.daysOfWeek!) };
       continue;
     }
     if (rule.minAmountPerTx && tx.krwAmount < rule.minAmountPerTx) {

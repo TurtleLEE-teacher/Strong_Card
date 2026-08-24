@@ -117,6 +117,17 @@ export async function CardDetailView({
     ),
   ];
 
+  /**
+   * 노션 `카테고리`를 채우면 열리는 혜택.
+   *
+   * 브랜드 사전으로는 절대 못 잡는 영역이 있다 — 약관이 업종 기준으로
+   * 쓰여 있는 경우다(신한 Discount Plan 음식점 10%). 그런 룰만 골라
+   * "어느 카테고리를 적으면 뭐가 걸리는지"를 화면에 옮긴다.
+   */
+  const categoryHints = card.benefits
+    .filter((rule) => rule.match.categories?.length)
+    .map((rule) => ({ label: rule.label, categories: rule.match.categories! }));
+
   const contributionsFor = (usage: (typeof snapshot.benefitUsage)[number]): UsageContribution[] => {
     const ruleIds = usage.capGroup
       ? new Set(card.benefits.filter((r) => r.capGroup === usage.capGroup).map((r) => r.id))
@@ -475,6 +486,29 @@ export async function CardDetailView({
             (예: GS칼텍스) 다음 새로고침부터 혜택 판정에 반영되고, 같은 가맹점의 다른
             달 거래에도 함께 적용됩니다.
           </p>
+          {/*
+            브랜드만으로는 답이 안 되는 영역이 있다.
+
+            신한 Discount Plan의 음식점 10%는 약관이 브랜드 열거가 아니라
+            **업종** 기준이라, 동네 식당은 브랜드 사전에 아무리 넣어도
+            안 걸린다. 유일한 신호가 노션 `카테고리`인데 화면은 브랜드
+            얘기만 하고 있었다 — 시키는 대로 브랜드를 채워도 아무 일이
+            안 일어나는 자리다.
+          */}
+          {categoryHints.length > 0 && (
+            <p className="mt-2 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              브랜드가 아니라 <strong>업종</strong>으로 판정하는 혜택도 있습니다. 동네
+              식당처럼 사전에 넣을 브랜드가 없는 곳은 노션 거래 행의{' '}
+              <strong>카테고리</strong> 열을 채워야 걸립니다 —{' '}
+              {categoryHints.map((hint, i) => (
+                <span key={hint.label}>
+                  {i > 0 && ', '}
+                  <strong>{hint.categories.join('·')}</strong> → {hint.label}
+                </span>
+              ))}
+              .
+            </p>
+          )}
         </Panel>
       )}
 
