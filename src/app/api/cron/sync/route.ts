@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 
-import { ACTIVE_CARDS, CARDS_BY_ID } from '@/config/cards';
-import { buildAllSnapshots, filterTransactions } from '@/lib/engine/snapshot';
+import { CARDS_BY_ID } from '@/config/cards';
+import { filterTransactions } from '@/lib/engine/snapshot';
+import { buildLiveSnapshots } from '@/lib/live-snapshots';
 import { judgeTransaction } from '@/lib/engine/performance';
-import { currentMonthKey } from '@/lib/date';
+import { currentMonthKey, isFutureMonth, isMonthKey } from '@/lib/date';
 import { assertCronAuthorized } from '@/lib/cron';
 import { buildBenefitAlert } from '@/lib/alerts/rules';
 import { sendAlert } from '@/lib/push';
@@ -25,12 +26,26 @@ export const maxDuration = 60;
  *
  * 거래 단위 알림의 중복 방지는 거래 행의 `알림 상태`로 한다.
  * 이미 '발송완료'인 거래는 건너뛴다.
+ *
+ * `?month=YYYY-MM`으로 **지난달을 다시 쓸 수 있다.** 룰을 고친 뒤 노션에
+ * 남은 옛 판정(혜택 0원·'인정')을 바로잡는 용도다. 지난달을 지정하면
+ * 혜택 적용액·실적 인정만 다시 쓰고, 푸시는 보내지 않으며 `알림 상태`도
+ * 건드리지 않는다 — 한 달 전 결제 알림이 수십 통 몰려오면 안 된다.
  */
 export async function POST(request: Request) {
   const unauthorized = assertCronAuthorized(request);
   if (unauthorized) return unauthorized;
 
-  const month = currentMonthKey();
+  const requested = new URL(request.url).searchParams.get('month');
+  if (requested !== null && (!isMonthKey(requested) || isFutureMonth(requested))) {
+    return NextResponse.json(
+      { ok: false, error: `month는 YYYY-MM 형식의 지난 달이어야 합니다: '${requested}'` },
+      { status: 400 },
+    );
+  }
+  const month = requested ?? currentMonthKey();
+  // 지난달 재기입은 기록만 바로잡는다. 알림은 이번 달에만 뜻이 있다.
+  const backfill = month !== currentMonthKey();
 
   try {
     let updated = 0;
@@ -49,7 +64,9 @@ export async function POST(request: Request) {
     }
 
     const transactions = await fetchTransactionsForMonth(month);
-    const snapshots = buildAllSnapshots(ACTIVE_CARDS, transactions, month);
+    // 화면과 같은 입구. 예전에 여기서 수동 전월실적을 빼먹어 8월 한 달
+    // 내내 혜택을 0원으로 써 버렸다 (live-snapshots.ts 주석 참고).
+    const snapshots = buildLiveSnapshots(transactions, month);
 
     for (const snapshot of snapshots) {
       const card = CARDS_BY_ID[snapshot.cardId];
@@ -60,11 +77,11 @@ export async function POST(request: Request) {
         const benefit = benefitByTx.get(tx.id);
         const hasBenefit = !!benefit && benefit.netAmount > 0;
 
-        // 이미 처리된 거래는 다시 알리지 않는다.
+        // 이미 처리된 거래는 다시 알리지 않는다. 지난달 재기입도 알림은 건너뛴다.
         const alreadyNotified = tx.alertStatus === '발송완료' || tx.alertStatus === '대상아님';
         let alertStatus = tx.alertStatus;
 
-        if (!alreadyNotified) {
+        if (!alreadyNotified && !backfill) {
           if (hasBenefit) {
             const alert = buildBenefitAlert(card, snapshot, tx.id, tx.title);
             if (alert) {
@@ -122,6 +139,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: errors.length === 0,
       month,
+      backfill,
       transactions: transactions.length,
       updated,
       notified,
