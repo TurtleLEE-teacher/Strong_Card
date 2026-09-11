@@ -3,13 +3,11 @@ import { ACTIVE_CARDS } from '@/config/cards';
 import { getDashboardData } from '@/lib/data';
 import { recommendCards, type Recommendation } from '@/lib/engine/recommend';
 import { percent, won } from '@/lib/format';
-import type { TxCategory } from '@/lib/types';
+import { TX_CATEGORIES, type TxCategory } from '@/lib/types';
 
 export const revalidate = 300;
 
-const CATEGORIES: TxCategory[] = [
-  '식비', '카페', '교통', '생활', '의료', '교육', '여가', '구독', '업무', '금융', '기타',
-];
+const CATEGORIES = TX_CATEGORIES;
 
 /**
  * "이 결제, 어느 카드로?"
