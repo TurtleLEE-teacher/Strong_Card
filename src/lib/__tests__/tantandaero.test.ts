@@ -279,3 +279,54 @@ describe('대중교통·택시·주유가 한 한도를 나눠 쓴다', () => {
     expect(group.used).toBe(5_000 + Math.floor(100_000 * (100 / 1_700)));
   });
 });
+
+describe('미용 20%는 업종 기준이라 이름에 "헤어"가 없어도 걸려야 한다', () => {
+  /*
+   * 2026-09-09 차홍룸 판교점 302,000원. KB Pay에는 20% 할인이 붙었는데 앱은
+   * '대상 가맹점 아님'이라고 했다 — 미용 룰이 이름 키워드에만 기대고 있었고,
+   * 브랜드 사전에 미용실이 하나도 없었다. 놓친 건 할인 2만원만이 아니다.
+   * Trendy 할인건은 실적에서 통째로 빠지는데 '인정'으로 잡혀 9월 실적이
+   * 30만원 부풀려졌다.
+   */
+  const base = [tx('아무데나', 900_000, '2026-08-15')]; // 지난달 → 80만 구간
+
+  it('차홍룸 판교점 302,000원 → 미용 한도 20,000원, 실적에서는 통째로 빠진다', () => {
+    const salon = tx('차홍룸 판교점', 302_000, '2026-09-09');
+    const snap = buildSnapshot(card, [...base, salon], '2026-09');
+    const applied = snap.appliedBenefits.find((b) => b.transactionId === salon.id)!;
+    expect(applied.ruleId).toBe('tt-trendy-beauty');
+    expect(applied.netAmount).toBe(20_000); // 60,400 → 영역 한도
+    expect(snap.performanceVerdicts[salon.id]).toBe('제외-혜택');
+    expect(snap.currentSpend).toBe(0);
+    expect(snap.noBenefit[salon.id]).toBeUndefined();
+  });
+
+  it.each([
+    ['허지스헤어 아트테라'], // 키워드 '헤어'
+    ['네일신'], // 키워드 '네일'
+    ['블루클럽 판교점'], // 브랜드 사전 (이름에 업종이 없다)
+    ['이가자헤어비스 분당'], // 브랜드 사전
+    ['살롱드마고'], // 키워드 '살롱'
+  ])('%s → 미용 룰', (name) => {
+    const t = tx(name, 50_000, '2026-09-10');
+    const snap = buildSnapshot(card, [...base, t], '2026-09');
+    expect(snap.appliedBenefits.find((b) => b.transactionId === t.id)?.ruleId).toBe(
+      'tt-trendy-beauty',
+    );
+  });
+
+  it('사전에 없는 동네 미용실은 노션 카테고리 "미용"으로 걸어 준다', () => {
+    const unknown = { ...tx('홍길동', 40_000, '2026-09-10'), category: '미용' as const };
+    const snap = buildSnapshot(card, [...base, unknown], '2026-09');
+    expect(snap.appliedBenefits.find((b) => b.transactionId === unknown.id)?.ruleId).toBe(
+      'tt-trendy-beauty',
+    );
+  });
+
+  it('카테고리도 없고 이름에도 업종이 없으면 여전히 대상 가맹점 아님', () => {
+    // 사전을 넓혔다고 아무 가게나 미용실로 보면 과다 계상이다.
+    const t = tx('홍길동', 40_000, '2026-09-10');
+    const snap = buildSnapshot(card, [...base, t], '2026-09');
+    expect(snap.noBenefit[t.id]?.reason).toBe('대상 가맹점 아님');
+  });
+});
