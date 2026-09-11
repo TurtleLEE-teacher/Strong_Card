@@ -13,7 +13,14 @@
  */
 
 import type { PageObjectResponse } from '@notionhq/client';
-import type { Currency, Issuer, PaymentKind, Transaction, TxCategory } from '@/lib/types';
+import {
+  TX_CATEGORIES,
+  type Currency,
+  type Issuer,
+  type PaymentKind,
+  type Transaction,
+  type TxCategory,
+} from '@/lib/types';
 import { NOTION_OPTION_TO_CARD_ID, resolveCardIdByLast4 } from '@/config/cards';
 import { normalizeMerchant, resolveBrand } from '@/config/merchants';
 import { extractIssuerCumulative, extractLast4, extractLast4FromApprovalNo } from '@/lib/parse/sms';
@@ -81,6 +88,13 @@ function dateStart(props: Props, name: string): string | null {
   return p && p.type === 'date' ? (p.date?.start ?? null) : null;
 }
 
+/** 노션 select는 아무 글자나 들어올 수 있다. 룰이 아는 값만 카테고리로 인정한다. */
+function asCategory(value: string | null): TxCategory | null {
+  return value && (TX_CATEGORIES as readonly string[]).includes(value)
+    ? (value as TxCategory)
+    : null;
+}
+
 /**
  * Notion 페이지 → Transaction.
  * 필수값(사용 일시)이 없으면 null을 돌려 조용히 건너뛴다.
@@ -131,7 +145,7 @@ export function toTransaction(page: PageObjectResponse, fx: FxOptions = {}): Tra
     issuer: selectValue(props, PROP.issuer) as Issuer | null,
     last4,
     cardId,
-    category: selectValue(props, PROP.category) as TxCategory | null,
+    category: asCategory(selectValue(props, PROP.category)),
     paymentKind: selectValue(props, PROP.paymentKind) as PaymentKind | null,
     installmentMonths: numberValue(props, PROP.installment),
     canceled: checkboxValue(props, PROP.canceled),
@@ -261,6 +275,47 @@ export async function fetchMerchantBrandMap(): Promise<Map<string, string>> {
 }
 
 /**
+ * 노션에서 `카테고리`가 채워진 거래를 **기간 제한 없이** 모아 가맹점명 →
+ * 카테고리 사전을 만든다. 브랜드 학습(fetchMerchantBrandMap)과 같은 구조다.
+ *
+ * 왜 필요한가. 문자 → 노션 자동화는 카테고리를 채우지 않는다 — 8~9월 거래
+ * 전부가 비어 있었다. 그런데 업종 기준 혜택(신한 Discount Plan 음식점 10%,
+ * 탄탄대로 미용 20%)은 브랜드 사전으로는 동네 가게를 영영 못 잡고, 카테고리
+ * 폴백이 유일한 길이다. 그 길이 한 번도 안 열린 채로 '담솥 판교아브뉴프랑점'
+ * 42,000원이 점심시간에 '대상 가맹점 아님'으로 떨어졌다.
+ *
+ * 한 행에 '식비'를 적으면 같은 가게의 다른 달 거래에도 따라붙는다.
+ */
+export async function fetchMerchantCategoryMap(): Promise<Map<string, TxCategory>> {
+  const notion = getNotionClient();
+  const map = new Map<string, TxCategory>();
+  let cursor: string | undefined;
+
+  do {
+    const response = await notion.dataSources.query({
+      data_source_id: getTransactionsDataSourceId(),
+      start_cursor: cursor,
+      page_size: 100,
+      filter: { property: PROP.category, select: { is_not_empty: true } },
+    });
+
+    for (const page of response.results) {
+      if (!('properties' in page)) continue;
+      const props = (page as PageObjectResponse).properties;
+      const category = asCategory(selectValue(props, PROP.category));
+      if (!category) continue;
+      const name = plainText(props, PROP.merchant) ?? plainText(props, PROP.title);
+      if (!name) continue;
+      map.set(normalizeMerchant(name), category);
+    }
+
+    cursor = response.next_cursor ?? undefined;
+  } while (cursor);
+
+  return map;
+}
+
+/**
  * 대시보드에 필요한 범위를 한 번에 가져온다.
  * 이번 달 혜택 한도는 지난달 실적으로 정해지므로 **두 달치**가 필요하다.
  */
@@ -273,12 +328,27 @@ export async function fetchTransactionsForMonth(
 
   // 브랜드 열이 아직 없는 워크스페이스에서도 화면은 떠야 한다. 사전 조회가
   // 실패하면 지정 없이 이름 사전만으로 굴린다 — 예전과 같은 동작이다.
-  const [transactions, brandMap] = await Promise.all([
+  const [transactions, brandMap, categoryMap] = await Promise.all([
     fetchTransactionsBetween(prevStart, endUtc, fx),
     fetchMerchantBrandMap().catch(() => new Map<string, string>()),
+    fetchMerchantCategoryMap().catch(() => new Map<string, TxCategory>()),
   ]);
 
-  return applyMerchantBrands(transactions, brandMap);
+  return applyMerchantCategories(applyMerchantBrands(transactions, brandMap), categoryMap);
+}
+
+/** 카테고리 사전을 거래에 입힌다. 행에 직접 적힌 값이 항상 우선한다. */
+export function applyMerchantCategories(
+  transactions: Transaction[],
+  categoryMap: ReadonlyMap<string, TxCategory>,
+): Transaction[] {
+  if (categoryMap.size === 0) return transactions;
+
+  return transactions.map((tx) => {
+    if (tx.category) return tx;
+    const learned = categoryMap.get(normalizeMerchant(tx.merchant ?? tx.title));
+    return learned ? { ...tx, category: learned } : tx;
+  });
 }
 
 /** 가맹점 사전을 거래에 입힌다. 행에 직접 적힌 지정이 항상 우선한다. */
