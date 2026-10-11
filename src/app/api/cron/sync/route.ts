@@ -8,6 +8,7 @@ import { currentMonthKey, isFutureMonth, isMonthKey } from '@/lib/date';
 import { assertCronAuthorized } from '@/lib/cron';
 import { buildBenefitAlert } from '@/lib/alerts/rules';
 import { sendAlert } from '@/lib/push';
+import { runIngestWatch } from '@/lib/ingest-watch';
 import {
   ensureBrandProperty,
   fetchTransactionsForMonth,
@@ -20,9 +21,11 @@ export const maxDuration = 60;
 /**
  * 동기화 크론 — 15분 간격 호출을 상정한다.
  *
- * 두 가지 일을 한다.
+ * 세 가지 일을 한다.
  *   1. 계산 결과를 노션 거래 행에 역기입 (카드 상품·원화금액·실적 판정·혜택액)
  *   2. 새로 혜택이 붙은 거래에 대해 푸시 발송
+ *   3. 적재 감시 — 문자 적재가 48시간 끊기거나 `[파싱 실패]` 행이 새로 생기면
+ *      푸시 발송 (lib/ingest-watch.ts)
  *
  * 거래 단위 알림의 중복 방지는 거래 행의 `알림 상태`로 한다.
  * 이미 '발송완료'인 거래는 건너뛴다.
@@ -136,6 +139,10 @@ export async function POST(request: Request) {
       }
     }
 
+    // 적재 감시는 지금 이 순간의 일이다. 지난달 재기입에서는 돌리지 않는다.
+    const watch = backfill ? null : await runIngestWatch();
+    if (watch) errors.push(...watch.errors.map((e) => `watch ${e}`));
+
     return NextResponse.json({
       ok: errors.length === 0,
       month,
@@ -145,6 +152,7 @@ export async function POST(request: Request) {
       notified,
       unmapped,
       brandPropertyCreated,
+      watch,
       errors: errors.slice(0, 20),
     });
   } catch (e) {

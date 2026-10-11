@@ -64,8 +64,7 @@ export interface SendResult {
 
 /** 알림 하나를 모든 활성 기기에 보낸다. */
 export async function sendAlert(alert: Alert): Promise<SendResult> {
-  const subscriptions = await fetchActiveSubscriptions();
-  return sendToSubscriptions(subscriptions, {
+  return sendPayload({
     title: alert.title,
     body: alert.body,
     url: alert.url,
@@ -74,6 +73,12 @@ export async function sendAlert(alert: Alert): Promise<SendResult> {
     // 여러 건을 긁은 날 마지막 한 건만 남는다.
     tag: notificationTag(alert),
   });
+}
+
+/** 카드와 무관한 알림(적재 감시 등)도 같은 길로 모든 활성 기기에 보낸다. */
+export async function sendPayload(payload: PushPayload): Promise<SendResult> {
+  const subscriptions = await fetchActiveSubscriptions();
+  return sendToSubscriptions(subscriptions, payload);
 }
 
 export async function sendToSubscriptions(
