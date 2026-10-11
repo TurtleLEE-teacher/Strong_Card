@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { CARDS_BY_ID } from '@/config/cards';
 import { buildAllSnapshots, buildSnapshot } from '@/lib/engine/snapshot';
+import { buildLiveSnapshots } from '@/lib/live-snapshots';
 import { ACTIVE_CARDS } from '@/config/cards';
 import { knownSpendFor, KNOWN_MONTHLY_SPEND } from '@/config/manual-spend';
 import type { Transaction } from '@/lib/types';
@@ -154,5 +155,43 @@ describe('박아 둔 7월 실적이 8월 구간을 정한다', () => {
   it('9월은 박아 둔 값이 없어 Notion 계산값으로 돌아간다', () => {
     // 8월 거래가 Notion에 쌓이면 자연히 계산된다. 표를 매달 갱신할 필요가 없다.
     expect(knownSpendFor('2026-08', 'shinhan-discount-plan')).toBeUndefined();
+  });
+});
+
+/**
+ * 화면·동기화 크론·알림 크론은 **같은 입구**로 스냅샷을 만들어야 한다.
+ *
+ * 2026-08, 화면은 7월 수동 실적으로 80만 구간을 보여주는데 크론은 수동값을
+ * 안 넘겨 노션 7월 거래 1건(2,500원)으로 '실적 미달'을 계산했다. 탄탄대로
+ * 8월 거래 34건이 전부 혜택 0원·'대상아님'으로 노션에 박혔고 푸시는 한 통도
+ * 안 나갔다. 여기서 그 입구가 수동값을 집어 가는지 고정한다.
+ */
+describe('실데이터 입구(buildLiveSnapshots)는 수동 전월실적을 쓴다', () => {
+  const by = (snaps: ReturnType<typeof buildLiveSnapshots>, id: string) =>
+    snaps.find((s) => s.cardId === id)!;
+
+  it('노션 7월 거래가 한 줌뿐이어도 8월 구간은 수동값으로 정해진다', () => {
+    // 크론이 실제로 본 상황 — 7월 탄탄대로 거래는 2,500원 한 건.
+    const stray: Transaction = {
+      ...tx('조은소아청소년과', 2_500, '2026-07-20'),
+      cardId: 'kb-tantandaero',
+      last4: '6089',
+      issuer: '국민',
+    };
+    const snaps = buildLiveSnapshots([stray], '2026-08');
+    expect(by(snaps, 'kb-tantandaero').previousSpendSource).toBe('manual');
+    expect(by(snaps, 'kb-tantandaero').appliedTier?.threshold).toBe(800_000);
+    expect(by(snaps, 'shinhan-discount-plan').appliedTier?.threshold).toBe(1_200_000);
+  });
+
+  it('8월 미용실 결제에 실제로 할인이 붙는다 (크론이 0원으로 쓰던 건)', () => {
+    const hair: Transaction = {
+      ...tx('허지스헤어 아트테라', 30_000, '2026-08-16'),
+      cardId: 'kb-tantandaero',
+      last4: '6089',
+      issuer: '국민',
+    };
+    const snap = by(buildLiveSnapshots([hair], '2026-08'), 'kb-tantandaero');
+    expect(snap.appliedBenefits.find((b) => b.transactionId === hair.id)?.netAmount).toBe(6_000);
   });
 });

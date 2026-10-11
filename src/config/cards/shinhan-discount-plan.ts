@@ -402,7 +402,12 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       label: '미용실 5%',
       type: 'discount',
       rate: 0.05,
-      match: { keywords: ['미용실', '헤어', '이용원', '미용'] },
+      // 업종 기준이라 탄탄대로 미용 룰과 같은 세 겹(브랜드·키워드·카테고리)으로 잡는다.
+      match: {
+        brands: [...BRAND_GROUPS.BEAUTY_SALON],
+        categories: ['미용'],
+        keywords: ['미용실', '헤어', '이용원', '미용', '살롱', 'SALON'],
+      },
       maxEligibleAmountPerTx: 50_000,
       bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,

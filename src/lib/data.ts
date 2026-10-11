@@ -3,9 +3,9 @@ import 'server-only';
 import type { CardMonthlySnapshot, Transaction } from '@/lib/types';
 import { ACTIVE_CARDS } from '@/config/cards';
 import { buildAllSnapshots, findUnmappedTransactions } from '@/lib/engine/snapshot';
+import { buildLiveSnapshots } from '@/lib/live-snapshots';
 import { currentMonthKey, daysRemainingInMonth, type MonthKey } from '@/lib/date';
 import { DEMO_TRANSACTIONS } from '@/lib/demo-data';
-import { knownSpendFor } from '@/config/manual-spend';
 
 /**
  * 대시보드가 필요로 하는 모든 것을 한 번에 조립한다.
@@ -70,13 +70,11 @@ export async function getDashboardData(month?: MonthKey): Promise<DashboardData>
 
   return {
     month: targetMonth,
-    snapshots: buildAllSnapshots(
-      ACTIVE_CARDS,
-      transactions,
-      targetMonth,
-      // 데모 데이터에는 지난달 거래가 들어 있으므로 수동값을 섞지 않는다.
-      isDemo ? undefined : knownSpendFor,
-    ),
+    // 데모 데이터에는 지난달 거래가 들어 있으므로 수동값을 섞지 않는다.
+    // 실데이터는 크론과 **같은 입구**를 탄다 — 화면과 노션이 다른 말을 하면 안 된다.
+    snapshots: isDemo
+      ? buildAllSnapshots(ACTIVE_CARDS, transactions, targetMonth)
+      : buildLiveSnapshots(transactions, targetMonth),
     unmapped: findUnmappedTransactions(transactions, targetMonth),
     transactions,
     daysRemaining,

@@ -153,6 +153,10 @@ export const SAMSUNG_AMEX_BLUE: Card = {
           ...BRAND_GROUPS.AB_EASY_PAY,
           ...BRAND_GROUPS.AB_OUTLET,
           ...BRAND_GROUPS.AB_TRENDY_FASHION,
+          // 쿠팡 결제는 문자에 '쿠팡'만 찍히지만 실제로는 쿠페이 간편결제라
+          // 1.5%가 적립된다 (삼성 앱에서 사용자 확인, 2026-09). '쿠팡이츠'는
+          // 완전일치로 COUPANG_EATS가 먼저 잡혀 편의점·배달 7%로 간다.
+          'COUPANG',
         ],
       },
       // **전월 이용금액에 관계없이** 제공된다. 구간표를 쓰면 실적 미달일 때

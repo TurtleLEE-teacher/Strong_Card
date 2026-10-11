@@ -27,7 +27,9 @@ export const BRAND_ALIASES: Record<string, string[]> = {
 
   // 편의점
   CU: ['CU', '씨유', 'BGF리테일'],
-  GS25: ['GS25', 'GS리테일'],
+  // 승인 문자가 한글로 '지에스25 현대알앤디', '지에스(GS)25현대알'로 찍히는
+  // 점포가 있다. 괄호가 지워지면 '지에스25…'만 남아 영문 별칭에 안 걸렸다.
+  GS25: ['GS25', 'GS리테일', '지에스25', '지에스이십오'],
   SEVEN_ELEVEN: ['세븐일레븐', '코리아세븐'],
   EMART24: ['이마트24'],
 
@@ -240,6 +242,27 @@ export const BRAND_ALIASES: Record<string, string[]> = {
   IKEA: ['IKEA', '이케아'],
   MUJI: ['MUJI', '무인양품'],
   CASAMIA: ['까사미아', 'CASAMIA'],
+
+  // ── 미용실 (프랜차이즈) ───────────────────────────────────────────────
+  // 탄탄대로 미용 20%와 신한 Discount Plan 미용실 5%는 **업종**(미용원·
+  // 피부미용원) 기준인데, 룰이 이름 키워드('미용실'·'헤어'…)에만 기대고
+  // 있어서 이름에 그 글자가 없는 살롱은 전부 새어 나갔다 — '차홍룸 판교점'
+  // 30만원이 '대상 가맹점 아님'으로 떨어졌다 (KB Pay에는 할인이 붙었다).
+  //
+  // 이름만으로 업종이 확실한 브랜드만 적는다. 두 글자짜리 흔한 말은 넣지
+  // 않는다 — '리안'은 '이탈리안'에, '준오'는 괜찮지만 '리안'은 위험하다.
+  CHAHONG: ['차홍룸', '차홍', 'CHAHONG'],
+  JUNO_HAIR: ['준오헤어', '준오'],
+  PARK_SEUNGCHUL: ['박승철헤어', '박승철헤어스투디오'],
+  LEE_CHUL_HAIR: ['이철헤어커커', '이철헤어'],
+  RIAHN_HAIR: ['리안헤어'],
+  ID_HAIR: ['아이디헤어'],
+  LABEAUTYCOA: ['라뷰티코아'],
+  IGAJA: ['이가자헤어비스', '이가자'],
+  JEO_HAIR: ['제오헤어'],
+  BLUECLUB: ['블루클럽'],
+  MUJENEF: ['김활란뮤제네프', '뮤제네프'],
+  HAIR_N_JOY: ['헤어앤조이'],
 };
 
 /**
@@ -348,6 +371,14 @@ export const BRAND_GROUPS = {
   DP_MART: ['EMART', 'TRADERS', 'LOTTE_MART'],
   /** 온라인서점 */
   BOOKSTORE: ['KYOBO', 'YES24'],
+  /**
+   * 미용실 프랜차이즈. 업종 기준 미용 혜택(탄탄대로 20%, Discount Plan 5%)이
+   * 쓴다. 여기 없는 동네 미용실은 노션 `카테고리`를 '미용'으로 채우면 걸린다.
+   */
+  BEAUTY_SALON: [
+    'CHAHONG', 'JUNO_HAIR', 'PARK_SEUNGCHUL', 'LEE_CHUL_HAIR', 'RIAHN_HAIR', 'ID_HAIR',
+    'LABEAUTYCOA', 'IGAJA', 'JEO_HAIR', 'BLUECLUB', 'MUJENEF', 'HAIR_N_JOY',
+  ],
 } as const;
 
 /**

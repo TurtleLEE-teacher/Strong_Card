@@ -34,7 +34,7 @@ import {
   toKstDateString,
   type MonthKey,
 } from '@/lib/date';
-import { isReversal, linkReversals } from './reversal';
+import { byApprovalTime, isReversal, linkReversals } from './reversal';
 
 export interface BenefitResult {
   appliedBenefits: AppliedBenefit[];
@@ -432,9 +432,7 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
   const { card, appliedTier, verdicts, month } = input;
 
   // 이용 순서대로 한도를 소진해야 실제 청구서와 일치한다.
-  const transactions = [...input.transactions].sort(
-    (a, b) => new Date(a.approvedAt).getTime() - new Date(b.approvedAt).getTime(),
-  );
+  const transactions = [...input.transactions].sort(byApprovalTime);
 
   const totalCap = appliedTier ? appliedTier.totalBenefitCap : null;
   // capGroup이 있으면 그 키로 한도를 공유한다. 없으면 룰 하나가 곧 한 그룹.

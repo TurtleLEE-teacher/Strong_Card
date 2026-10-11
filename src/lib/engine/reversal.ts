@@ -28,6 +28,20 @@ export function isReversal(tx: Transaction): boolean {
   return tx.krwAmount < 0;
 }
 
+/**
+ * 승인 시각 오름차순. 같은 시각이면 원거래를 취소 전표보다 앞에 둔다.
+ *
+ * 해외 선승인(Uber 등)은 취소 문자에 원승인 시각이 그대로 찍혀 승인과
+ * 취소가 같은 분이 된다. 노션은 같은 시각끼리의 순서를 보장하지 않아
+ * 취소가 먼저 오면, 아직 지나오지 않은 원거래를 못 찾아 짝이 끊긴다.
+ * 짝짓기와 혜택 계산이 같은 순서를 봐야 하므로 이 함수 하나를 같이 쓴다.
+ */
+export function byApprovalTime(a: Transaction, b: Transaction): number {
+  const diff = new Date(a.approvedAt).getTime() - new Date(b.approvedAt).getTime();
+  if (diff !== 0) return diff;
+  return Number(isReversal(a)) - Number(isReversal(b));
+}
+
 export interface ReversalLink {
   /** 되감는 원거래의 id */
   originalId: string;
@@ -76,9 +90,7 @@ function merchantKey(tx: Transaction): string {
  * 모르는 채로 두는 편이 틀리게 되돌리는 것보다 낫다.
  */
 export function linkReversals(transactions: Transaction[]): Map<string, ReversalLink> {
-  const sorted = [...transactions].sort(
-    (a, b) => new Date(a.approvedAt).getTime() - new Date(b.approvedAt).getTime(),
-  );
+  const sorted = [...transactions].sort(byApprovalTime);
 
   /** 원거래별 '아직 취소되지 않은 금액'. 등록된 것 = 이미 지나온 거래. */
   const remaining = new Map<string, number>();

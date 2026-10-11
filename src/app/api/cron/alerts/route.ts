@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { ACTIVE_CARDS, CARDS_BY_ID } from '@/config/cards';
-import { buildAllSnapshots } from '@/lib/engine/snapshot';
+import { CARDS_BY_ID } from '@/config/cards';
+import { buildLiveSnapshots } from '@/lib/live-snapshots';
 import { currentMonthKey, daysRemainingInMonth } from '@/lib/date';
 import { assertCronAuthorized } from '@/lib/cron';
 import { evaluateMonthlyAlerts } from '@/lib/alerts/rules';
@@ -32,7 +32,9 @@ export async function POST(request: Request) {
       fetchSentAlertKeys(month),
     ]);
 
-    const snapshots = buildAllSnapshots(ACTIVE_CARDS, transactions, month);
+    // 화면과 같은 입구. 여기서 수동 전월실적을 빼먹으면 실적 미달 경고가
+    // 거짓으로 나간다.
+    const snapshots = buildLiveSnapshots(transactions, month);
 
     let sent = 0;
     let skipped = 0;
