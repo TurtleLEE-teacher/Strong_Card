@@ -264,3 +264,30 @@ describe('취소 전표 짝짓기', () => {
     expect(linkReversals([back, later]).has(back.id)).toBe(false);
   });
 });
+
+describe('승인과 취소가 같은 분에 찍혀도 짝을 찾는다', () => {
+  // 해외 선승인(Uber 등)은 취소 문자에 원승인 시각이 그대로 찍힌다.
+  // 노션은 같은 시각끼리의 순서를 보장하지 않아 취소 행이 먼저 올 수 있다.
+  // 실측 2026-10-11: 10/03 UBER 590엔 승인·취소 쌍이 취소 → 승인 순으로 내려왔다.
+  const amex = CARDS_BY_ID['samsung-amex-blue'];
+  const overseas = (t: Transaction): Transaction => ({ ...t, paymentKind: '해외' });
+
+  it('취소 행이 먼저 와도 원거래에 붙는다', () => {
+    const buy = overseas(tx('samsung-amex-blue', 'UBER', 5_493, '2026-10-03', 10));
+    const back = cancel('samsung-amex-blue', 'UBER', 5_493, '2026-10-03', 10);
+
+    expect(linkReversals([back, buy]).get(back.id)?.originalId).toBe(buy.id);
+  });
+
+  it('취소 행이 먼저 와도 혜택이 회수된다', () => {
+    const buy = overseas(tx('samsung-amex-blue', 'UBER', 5_493, '2026-10-03', 10));
+    const back = cancel('samsung-amex-blue', 'UBER', 5_493, '2026-10-03', 10);
+    const snap = buildSnapshot(
+      amex,
+      [prevMonth('samsung-amex-blue', 1_000_000), back, buy],
+      '2026-10',
+    );
+
+    expect(snap.totalBenefitUsed).toBe(0);
+  });
+});
