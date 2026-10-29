@@ -154,6 +154,7 @@ export function matchesRule(rule: BenefitRule, tx: Transaction): boolean {
  * 거래에 적용할 룰 하나를 고른다.
  * priority 오름차순(낮을수록 우선) → 먼저 매칭되는 룰 하나만 적용한다.
  * 카드사는 보통 중복 할인을 주지 않으므로 최초 1건만 적용한다.
+ * 중복 적립 룰(stackable)은 여기서 고르지 않는다 — selectStackedRules가 따로 고른다.
  *
  * 적용 구간에서 한도가 0인 룰은 **비활성**으로 보고 건너뛴다.
  * 이게 없으면 같은 대상에 요율만 다른 룰이 여러 개일 때
@@ -167,6 +168,7 @@ export function selectRule(
   counters?: UsageCounters,
 ): BenefitRule | null {
   const candidates = card.benefits
+    .filter((r) => !r.stackable)
     .filter((r) => isRuleEffective(tx.approvedAt, r.effectiveFrom, r.effectiveUntil))
     .filter((r) => resolveCap(r.capPerMonth, appliedTier) !== 0)
     .sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
@@ -178,6 +180,29 @@ export function selectRule(
     if (matchesRule(rule, tx)) return rule;
   }
   return null;
+}
+
+/**
+ * 주 룰 위에 **추가로** 얹히는 중복 적립 룰을 모두 고른다.
+ *
+ * selectRule은 거래 하나에 룰 하나만 고르고, 중복 적립(stackable) 룰은 그
+ * 후보에서 빠져 있다. 여기서 따로 찾아 걸리는 것을 **전부** 붙인다.
+ * 고르는 조건(유효기간·한도 0 아님·최소금액·횟수·가맹점)은 selectRule과 같다.
+ */
+export function selectStackedRules(
+  card: Card,
+  tx: Transaction,
+  appliedTier: SpendTier | null,
+  counters?: UsageCounters,
+): BenefitRule[] {
+  return card.benefits
+    .filter((r) => r.stackable)
+    .filter((r) => isRuleEffective(tx.approvedAt, r.effectiveFrom, r.effectiveUntil))
+    .filter((r) => resolveCap(r.capPerMonth, appliedTier) !== 0)
+    .filter((r) => !(r.minAmountPerTx && tx.krwAmount < r.minAmountPerTx))
+    .filter((r) => !counters || counters.hasRemainingCount(r, tx))
+    .filter((r) => matchesRule(r, tx))
+    .sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
 }
 
 /**
@@ -281,6 +306,8 @@ function isShadowed(
   return card.benefits.some(
     (other) =>
       other.id !== rule.id &&
+      // 중복 적립 룰은 주 룰과 따로 붙으므로 서로를 가리지 않는다.
+      !!other.stackable === !!rule.stackable &&
       (other.priority ?? 100) < (rule.priority ?? 100) &&
       sameMatcher(other, rule) &&
       resolveCap(other.capPerMonth, appliedTier) !== 0 &&
@@ -450,102 +477,20 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
   // 원거래는 항상 먼저 처리되므로, 전표를 만날 때는 되감을 금액이 이미
   // appliedByTx에 들어 있다.
   const links = linkReversals(input.transactions);
-  const appliedByTx = new Map<string, AppliedBenefit>();
+  /**
+   * 거래별로 붙은 혜택. 중복 적립(stackable) 룰이 있으면 한 거래에 여러 건이다.
+   * 취소 전표가 오면 이 목록을 **전부** 되감아야 한도가 제자리로 돌아온다.
+   */
+  const appliedByTx = new Map<string, AppliedBenefit[]>();
   const txById = new Map(transactions.map((t) => [t.id, t]));
 
-  for (const tx of transactions) {
-    /*
-     * 취소 전표(음수) — 원거래에 붙었던 혜택을 **되감는다.**
-     *
-     * 그냥 건너뛰면 취소한 결제가 태운 한도가 영영 돌아오지 않는다.
-     * 사용자는 쓰지도 않은 5,000원이 소진된 화면을 보고, 남은 한도를
-     * 실제보다 적게 알고 다른 카드를 꺼내게 된다.
-     */
-    if (isReversal(tx)) {
-      const link = links.get(tx.id);
-      if (!link) {
-        // 이번 달 안에 짝이 없다 — 지난달 결제를 이번 달에 취소한 경우다.
-        // 그 혜택은 지난달 한도에서 나갔으므로 이번 달 한도를 되돌리면
-        // 이번 달 소진량이 실제보다 작아진다. 건드리지 않는다.
-        noBenefit[tx.id] = { reason: '취소·환불', detail: '원거래를 못 찾아 회수 안 함' };
-        continue;
-      }
-
-      const origin = appliedByTx.get(link.originalId);
-      const rule = origin ? card.benefits.find((r) => r.id === origin.ruleId) : undefined;
-      if (!origin || !rule) {
-        // 원거래가 애초에 혜택을 못 받았다. 되돌릴 게 없다.
-        noBenefit[tx.id] = { reason: '취소·환불' };
-        continue;
-      }
-
-      const capKey = rule.capGroup ?? rule.id;
-      const used = monthlyUsed.get(capKey) ?? 0;
-      // 부분취소는 되감은 비율만큼만 회수한다.
-      const share = link.full
-        ? origin.netAmount
-        : Math.floor((origin.netAmount * link.amount) / link.originalAmount);
-      // 소진된 적 없는 한도를 되돌리면 음수가 된다. 실제로 태운 만큼까지만.
-      const refund = Math.max(0, Math.min(share, used, totalUsed));
-
-      monthlyUsed.set(capKey, used - refund);
-      totalUsed -= refund;
-
-      if (link.full) {
-        txCount.set(rule.id, Math.max(0, (txCount.get(rule.id) ?? 0) - 1));
-        const original = txById.get(link.originalId);
-        if (original) counters.release(rule, original);
-      }
-
-      if (refund === 0) noBenefit[tx.id] = { reason: '취소·환불', ruleLabel: rule.label };
-
-      // 음수 혜택으로 남긴다. 화면이 '−1,000원 회수'라고 말할 수 있어야
-      // 한도가 왜 줄었는지 사용자가 추적할 수 있다.
-      appliedBenefits.push({
-        transactionId: tx.id,
-        ruleId: rule.id,
-        ruleLabel: rule.label,
-        type: rule.type,
-        grossAmount: -refund,
-        netAmount: -refund,
-        cappedAmount: 0,
-        cappedBy: 'none',
-      });
-      continue;
-    }
-
-    if (tx.canceled || tx.paymentKind === '취소·환불') {
-      noBenefit[tx.id] = { reason: '취소·환불' };
-      continue;
-    }
-
-    const rule = selectRule(card, tx, appliedTier, counters);
-    const verdictForTx = verdicts?.get(tx.id);
-    const excluded = verdictForTx !== undefined && verdictForTx !== '인정';
-
-    if (!rule) {
-      // 실적 미달로 룰이 비활성이면 '미분류'가 아니다. 브랜드 사전에
-      // 아예 없는 가맹점만 미분류로 올려야 관리 화면이 신호를 유지한다.
-      if (!matchesAnyRule(card, tx)) unmatchedTransactionIds.push(tx.id);
-      // 실적에서 빠지는 거래라면 그걸 먼저 말한다. '대상 가맹점 아님'보다
-      // 중요한 사실이다 — 혜택뿐 아니라 실적에도 안 잡힌다는 뜻이니까.
-      noBenefit[tx.id] = excluded
-        ? { reason: '실적 제외 항목', detail: verdictForTx.replace('제외-', '') }
-        : explainNoRule(card, tx, appliedTier, counters);
-      continue;
-    }
-
-    // 실적에서 제외된 거래(세금·상품권 등)는 원칙적으로 혜택도 없다.
-    // 단, 룰이 명시적으로 opt-in 하면 준다 (예: 신한EV 하이패스 캐시백).
-    if (excluded && !rule.applyToExcludedSpend) {
-      noBenefit[tx.id] = {
-        reason: '실적 제외 항목',
-        ruleLabel: rule.label,
-        detail: verdictForTx.replace('제외-', ''),
-      };
-      continue;
-    }
-
+  /**
+   * 룰 하나를 거래에 적용하고 한도·횟수를 소진한다.
+   *
+   * 주 룰과 중복 적립 룰이 같은 길을 탄다. 따로 쓰면 건당·월·통합 한도 중
+   * 하나를 한쪽에서만 빼먹는 일이 생긴다.
+   */
+  const applyRule = (rule: BenefitRule, tx: Transaction): AppliedBenefit => {
     const ruleCap = resolveCap(rule.capPerMonth, appliedTier);
     const capKey = rule.capGroup ?? rule.id;
     const used = monthlyUsed.get(capKey) ?? 0;
@@ -600,17 +545,13 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
     // 거래"가 그 뜻이다 — 한도에 걸려 0원이 된 거래는 할인 거래가 아니다.
     if (bonusEligible && amount > 0) bonusDayUsed.add(capKey);
 
-    if (amount === 0) {
-      noBenefit[tx.id] = { reason: '월 한도 소진', ruleLabel: rule.label };
-    }
-
     monthlyUsed.set(capKey, used + amount);
     txCount.set(rule.id, (txCount.get(rule.id) ?? 0) + 1);
     // 금액이 0원이어도 횟수는 소진된 것으로 본다. 카드사도 그렇게 센다.
     counters.record(rule, tx);
     totalUsed += amount;
 
-    const applied: AppliedBenefit = {
+    const result: AppliedBenefit = {
       transactionId: tx.id,
       ruleId: rule.id,
       ruleLabel: rule.label,
@@ -620,8 +561,126 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
       cappedAmount: gross - amount,
       cappedBy,
     };
-    appliedBenefits.push(applied);
-    appliedByTx.set(tx.id, applied);
+    appliedBenefits.push(result);
+    return result;
+  };
+
+  for (const tx of transactions) {
+    /*
+     * 취소 전표(음수) — 원거래에 붙었던 혜택을 **되감는다.**
+     *
+     * 그냥 건너뛰면 취소한 결제가 태운 한도가 영영 돌아오지 않는다.
+     * 사용자는 쓰지도 않은 5,000원이 소진된 화면을 보고, 남은 한도를
+     * 실제보다 적게 알고 다른 카드를 꺼내게 된다.
+     */
+    if (isReversal(tx)) {
+      const link = links.get(tx.id);
+      if (!link) {
+        // 이번 달 안에 짝이 없다 — 지난달 결제를 이번 달에 취소한 경우다.
+        // 그 혜택은 지난달 한도에서 나갔으므로 이번 달 한도를 되돌리면
+        // 이번 달 소진량이 실제보다 작아진다. 건드리지 않는다.
+        noBenefit[tx.id] = { reason: '취소·환불', detail: '원거래를 못 찾아 회수 안 함' };
+        continue;
+      }
+
+      // 중복 적립을 받은 원거래는 혜택이 여러 건이다. 건마다 제 한도로 되돌린다.
+      const origins = (appliedByTx.get(link.originalId) ?? []).flatMap((origin) => {
+        const rule = card.benefits.find((r) => r.id === origin.ruleId);
+        return rule ? [{ origin, rule }] : [];
+      });
+      if (origins.length === 0) {
+        // 원거래가 애초에 혜택을 못 받았다. 되돌릴 게 없다.
+        noBenefit[tx.id] = { reason: '취소·환불' };
+        continue;
+      }
+
+      let refunded = 0;
+      for (const { origin, rule } of origins) {
+        const capKey = rule.capGroup ?? rule.id;
+        const used = monthlyUsed.get(capKey) ?? 0;
+        // 부분취소는 되감은 비율만큼만 회수한다.
+        const share = link.full
+          ? origin.netAmount
+          : Math.floor((origin.netAmount * link.amount) / link.originalAmount);
+        // 소진된 적 없는 한도를 되돌리면 음수가 된다. 실제로 태운 만큼까지만.
+        const refund = Math.max(0, Math.min(share, used, totalUsed));
+
+        monthlyUsed.set(capKey, used - refund);
+        totalUsed -= refund;
+        refunded += refund;
+
+        if (link.full) {
+          txCount.set(rule.id, Math.max(0, (txCount.get(rule.id) ?? 0) - 1));
+          const original = txById.get(link.originalId);
+          if (original) counters.release(rule, original);
+        }
+
+        // 음수 혜택으로 남긴다. 화면이 '−1,000원 회수'라고 말할 수 있어야
+        // 한도가 왜 줄었는지 사용자가 추적할 수 있다.
+        appliedBenefits.push({
+          transactionId: tx.id,
+          ruleId: rule.id,
+          ruleLabel: rule.label,
+          type: rule.type,
+          grossAmount: -refund,
+          netAmount: -refund,
+          cappedAmount: 0,
+          cappedBy: 'none',
+        });
+      }
+
+      if (refunded === 0) {
+        noBenefit[tx.id] = { reason: '취소·환불', ruleLabel: origins[0].rule.label };
+      }
+      continue;
+    }
+
+    if (tx.canceled || tx.paymentKind === '취소·환불') {
+      noBenefit[tx.id] = { reason: '취소·환불' };
+      continue;
+    }
+
+    const rule = selectRule(card, tx, appliedTier, counters);
+    const verdictForTx = verdicts?.get(tx.id);
+    const excluded = verdictForTx !== undefined && verdictForTx !== '인정';
+    const applied: AppliedBenefit[] = [];
+    /** 혜택이 0원으로 끝나면 달아 둘 이유. 한 건이라도 받으면 버린다. */
+    let miss: NoBenefitNote | null = null;
+
+    if (!rule) {
+      // 실적 미달로 룰이 비활성이면 '미분류'가 아니다. 브랜드 사전에
+      // 아예 없는 가맹점만 미분류로 올려야 관리 화면이 신호를 유지한다.
+      if (!matchesAnyRule(card, tx)) unmatchedTransactionIds.push(tx.id);
+      // 실적에서 빠지는 거래라면 그걸 먼저 말한다. '대상 가맹점 아님'보다
+      // 중요한 사실이다 — 혜택뿐 아니라 실적에도 안 잡힌다는 뜻이니까.
+      miss = excluded
+        ? { reason: '실적 제외 항목', detail: verdictForTx.replace('제외-', '') }
+        : explainNoRule(card, tx, appliedTier, counters);
+    } else if (excluded && !rule.applyToExcludedSpend) {
+      // 실적에서 제외된 거래(세금·상품권 등)는 원칙적으로 혜택도 없다.
+      // 단, 룰이 명시적으로 opt-in 하면 준다 (예: 신한EV 하이패스 캐시백).
+      miss = {
+        reason: '실적 제외 항목',
+        ruleLabel: rule.label,
+        detail: verdictForTx.replace('제외-', ''),
+      };
+    } else {
+      const benefit = applyRule(rule, tx);
+      applied.push(benefit);
+      if (benefit.netAmount === 0) miss = { reason: '월 한도 소진', ruleLabel: rule.label };
+    }
+
+    // 중복 적립 — 주 룰과 별개로 걸리는 것은 전부 붙는다. 주 룰이 한도를
+    // 다 써서 0원이어도 붙는다 (쿠팡와우: '그 외' 한도 초과 시 추가 1%만).
+    for (const extra of selectStackedRules(card, tx, appliedTier, counters)) {
+      if (excluded && !extra.applyToExcludedSpend) continue;
+      const benefit = applyRule(extra, tx);
+      applied.push(benefit);
+      if (benefit.netAmount === 0) miss ??= { reason: '월 한도 소진', ruleLabel: extra.label };
+    }
+
+    if (applied.length > 0) appliedByTx.set(tx.id, applied);
+    if (miss && !applied.some((x) => x.netAmount > 0)) noBenefit[tx.id] = miss;
   }
 
   const usage: BenefitUsage[] = card.benefits
@@ -633,7 +692,13 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
     // 프로모션 룰과 기본 룰을 겹쳐 쌓는 구조(쿠팡와우)에서 기본 룰은
     // 프로모션 기간 내내 한 번도 적용되지 않는데, 목록에 남으면
     // '0 / 20,000원'짜리 줄이 두 배로 늘어 한도를 오해하게 된다.
-    .filter((rule) => !isShadowed(card, rule, appliedTier, month))
+    //
+    // 단, 이번 달 실제로 붙은 건이 있으면 남긴다. 프로모션이 달 중간에
+    // 끝나면(쿠팡와우 2026-10-15) 그달 뒷부분 결제는 기본 룰이 받는데,
+    // 가렸다고 지우면 그 적립이 소진 현황 어디에도 안 보인다.
+    .filter(
+      (rule) => (txCount.get(rule.id) ?? 0) > 0 || !isShadowed(card, rule, appliedTier, month),
+    )
     .map((rule) => {
       const cap = resolveCap(rule.capPerMonth, appliedTier);
       const capKey = rule.capGroup ?? rule.id;
@@ -687,4 +752,46 @@ export function computeBenefits(input: ComputeBenefitsInput): BenefitResult {
       card.benefits.map((r) => [r.id, counters.countFor(r.id)]),
     ),
   };
+}
+
+/**
+ * 거래 하나에 붙은 혜택을 **한 건으로** 합친다.
+ *
+ * 중복 적립(stackable) 룰이 있으면 거래 하나에 혜택이 여러 건 붙는다
+ * (쿠팡와우 카페 결제 = 그 외 1% + 카페 1% 추가). 거래 단위로 보여 주는
+ * 곳(거래 목록·알림·노션 역기입)이 첫 건만 집으면 적립이 절반으로 나온다.
+ *
+ * 금액은 더하고 이름은 ' + '로 잇는다. 0원짜리는 이름에서 뺀다 — 한도를
+ * 다 쓴 쪽 이름까지 붙으면 받지도 않은 혜택을 받은 것처럼 읽힌다.
+ *
+ * 혜택별 소진 현황은 이걸 쓰면 안 된다. 그쪽은 룰 단위 원본을 본다.
+ */
+export function benefitsByTransaction(
+  applied: readonly AppliedBenefit[],
+): Map<string, AppliedBenefit> {
+  const parts = new Map<string, AppliedBenefit[]>();
+  for (const benefit of applied) {
+    const list = parts.get(benefit.transactionId);
+    if (list) list.push(benefit);
+    else parts.set(benefit.transactionId, [benefit]);
+  }
+
+  const merged = new Map<string, AppliedBenefit>();
+  for (const [txId, list] of parts) {
+    if (list.length === 1) {
+      merged.set(txId, list[0]);
+      continue;
+    }
+    const earning = list.filter((x) => x.netAmount !== 0);
+    const named = earning.length > 0 ? earning : list.slice(0, 1);
+    merged.set(txId, {
+      ...list[0],
+      ruleLabel: named.map((x) => x.ruleLabel).join(' + '),
+      grossAmount: list.reduce((sum, x) => sum + x.grossAmount, 0),
+      netAmount: list.reduce((sum, x) => sum + x.netAmount, 0),
+      cappedAmount: list.reduce((sum, x) => sum + x.cappedAmount, 0),
+      cappedBy: list.find((x) => x.cappedBy !== 'none')?.cappedBy ?? 'none',
+    });
+  }
+  return merged;
 }
