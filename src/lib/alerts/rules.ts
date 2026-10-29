@@ -11,6 +11,7 @@
 import type { CardMonthlySnapshot, Card, CardId } from '@/lib/types';
 import type { MonthKey } from '@/lib/date';
 import { won } from '@/lib/format';
+import { benefitsByTransaction } from '@/lib/engine/benefits';
 
 export type AlertType = '혜택적용' | '실적미달' | '실적달성' | '한도소진임박';
 
@@ -154,7 +155,8 @@ export function buildBenefitAlert(
   transactionId: string,
   merchantTitle: string,
 ): Alert | null {
-  const benefit = snapshot.appliedBenefits.find((b) => b.transactionId === transactionId);
+  // 중복 적립(쿠팡와우 카페 1% 추가)이면 한 거래에 혜택이 여러 건이다. 합쳐서 한 번 알린다.
+  const benefit = benefitsByTransaction(snapshot.appliedBenefits).get(transactionId);
   if (!benefit || benefit.netAmount <= 0) return null;
 
   const verb = benefit.type === 'discount' ? '할인' : '적립';
