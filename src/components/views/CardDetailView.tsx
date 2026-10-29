@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ACTIVE_CARDS, CARDS_BY_ID } from '@/config/cards';
 import { findMissedBenefits } from '@/lib/engine/recommend';
+import { benefitsByTransaction } from '@/lib/engine/benefits';
 import { excludesSpendFromPerformance } from '@/lib/engine/performance';
 import { getDashboardData } from '@/lib/data';
 import { Meter } from '@/components/Meter';
@@ -41,7 +42,9 @@ export async function CardDetailView({
   const snapshot = snapshots.find((s) => s.cardId === card.id);
   if (!snapshot) notFound();
 
-  const benefitByTx = new Map(snapshot.appliedBenefits.map((b) => [b.transactionId, b]));
+  // 거래 하나에 혜택 하나로 합친다. 중복 적립(쿠팡와우 카페 1% 추가)이면
+  // 한 거래에 여러 건이 붙는데, 그대로 Map에 넣으면 마지막 건만 남는다.
+  const benefitByTx = benefitsByTransaction(snapshot.appliedBenefits);
   const monthTx = byRecentFirst(
     transactions.filter((tx) => tx.cardId === card.id && toMonthKey(tx.approvedAt) === month),
   );
@@ -83,7 +86,7 @@ export async function CardDetailView({
    * 취소로 회수된 건(음수)도 남긴다 — 합계가 왜 줄었는지 설명해야 한다.
    */
   const earned = byRecentFirst(
-    snapshot.appliedBenefits
+    [...benefitByTx.values()]
       .filter((b) => b.netAmount !== 0)
       .flatMap((benefit) => {
         const tx = txById.get(benefit.transactionId);

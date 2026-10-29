@@ -18,7 +18,7 @@ import type {
   Transaction,
   TxCategory,
 } from '@/lib/types';
-import { resolveCap, selectRule, UsageCounters } from './benefits';
+import { resolveCap, selectRule, selectStackedRules, UsageCounters } from './benefits';
 import { excludesSpendFromPerformance, judgeTransaction } from './performance';
 import { isReversal } from './reversal';
 import { percent } from '@/lib/format';
@@ -270,15 +270,50 @@ export function estimateBenefit(
     cappedBy = 'total';
   }
 
+  /*
+   * 중복 적립 — 주 룰 위에 얹히는 추가 혜택 (쿠팡와우 2026-11 카페·편의점 1% 추가).
+   *
+   * 원장(computeBenefits)과 같은 조건으로 고르고 같은 식으로 한도를 깎는다.
+   * 빼먹으면 카페에서 쿠팡와우가 실제(2%)의 절반으로 보여 다른 카드를 권하게 된다.
+   */
+  const parts = [{ label: rule.label, rate: rule.rate, amount }];
+  let expected = amount;
+  let grossAll = gross;
+  for (const extra of selectStackedRules(card, pseudo, snapshot.appliedTier, counters)) {
+    if (verdict !== '인정' && !extra.applyToExcludedSpend) continue;
+    const extraEligible =
+      extra.maxEligibleAmountPerTx !== undefined
+        ? Math.min(query.amount, extra.maxEligibleAmountPerTx)
+        : query.amount;
+    let extraAmount = Math.floor(extraEligible * extra.rate);
+    if (extra.capPerTx !== undefined) extraAmount = Math.min(extraAmount, extra.capPerTx);
+    const extraRemaining = remainingRuleCap(snapshot, extra);
+    if (extraRemaining !== null) extraAmount = Math.min(extraAmount, extraRemaining);
+    if (totalRemaining !== null) {
+      extraAmount = Math.min(extraAmount, Math.max(0, totalRemaining - expected));
+    }
+    grossAll += Math.floor(query.amount * extra.rate);
+    expected += extraAmount;
+    parts.push({ label: extra.label, rate: extra.rate, amount: extraAmount });
+  }
+  // 0원인 쪽은 이름·요율에서 뺀다. 한도를 다 쓴 혜택까지 붙으면 받는 것처럼 읽힌다.
+  const earning = parts.filter((p) => p.amount > 0);
+  const shown = earning.length > 0 ? earning : parts.slice(0, 1);
+
   return {
     ...base,
-    expectedBenefit: amount,
-    grossBenefit: gross,
-    cappedAmount: gross - amount,
+    ruleLabel: shown.map((p) => p.label).join(' + '),
+    rateLabel: formatRate(shown.reduce((sum, p) => sum + p.rate, 0)),
+    expectedBenefit: expected,
+    grossBenefit: grossAll,
+    cappedAmount: grossAll - expected,
     cappedBy,
-    effectiveRate: query.amount > 0 ? amount / query.amount : 0,
-    reason: describeReason(rule, cappedBy, ruleRemaining, totalRemaining),
-    ...performance(amount),
+    effectiveRate: query.amount > 0 ? expected / query.amount : 0,
+    reason:
+      amount === 0 && expected > 0
+        ? `${rule.label} 한도 소진 · 추가 적립만 적용`
+        : describeReason(rule, cappedBy, ruleRemaining, totalRemaining),
+    ...performance(expected),
   };
 }
 
@@ -470,8 +505,11 @@ export function findMissedBenefits(
     const usedCard = cardById.get(tx.cardId);
     if (!usedSnapshot || !usedCard) continue;
 
-    const actual =
-      usedSnapshot.appliedBenefits.find((b) => b.transactionId === tx.id)?.netAmount ?? 0;
+    // 중복 적립을 받은 거래는 혜택이 여러 건이다. 첫 건만 보면 받은 금액을
+    // 작게 잡아, 놓치지 않은 혜택을 놓쳤다고 말하게 된다.
+    const actual = usedSnapshot.appliedBenefits
+      .filter((b) => b.transactionId === tx.id)
+      .reduce((sum, b) => sum + b.netAmount, 0);
 
     const query: PurchaseQuery = {
       merchant: tx.merchant ?? tx.title,
