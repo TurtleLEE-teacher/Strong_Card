@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { CARDS_BY_ID } from '@/config/cards';
 import { filterTransactions } from '@/lib/engine/snapshot';
+import { benefitsByTransaction } from '@/lib/engine/benefits';
 import { buildLiveSnapshots } from '@/lib/live-snapshots';
 import { judgeTransaction } from '@/lib/engine/performance';
 import { currentMonthKey, isFutureMonth, isMonthKey } from '@/lib/date';
@@ -74,7 +75,8 @@ export async function POST(request: Request) {
     for (const snapshot of snapshots) {
       const card = CARDS_BY_ID[snapshot.cardId];
       const cardTx = filterTransactions(transactions, card.id, month);
-      const benefitByTx = new Map(snapshot.appliedBenefits.map((b) => [b.transactionId, b]));
+      // 중복 적립이면 한 거래에 혜택이 여러 건이다. 합쳐야 노션 혜택액이 맞는다.
+      const benefitByTx = benefitsByTransaction(snapshot.appliedBenefits);
 
       for (const tx of cardTx) {
         const benefit = benefitByTx.get(tx.id);
