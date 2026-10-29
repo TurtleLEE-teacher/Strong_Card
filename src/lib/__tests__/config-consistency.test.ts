@@ -176,6 +176,8 @@ describe('MECE — 룰이 서로를 가리지 않는가', () => {
             const tx = probeTx(card, name, hour, dow);
             const hits = card.benefits.filter(
               (r) =>
+                // 중복 적립 룰은 일부러 겹친다 — 주 룰과 따로 붙으니 순서 문제가 없다.
+                !r.stackable &&
                 isRuleEffective(tx.approvedAt, r.effectiveFrom, r.effectiveUntil) &&
                 matchesRule(r, tx),
             );
@@ -206,7 +208,9 @@ describe('MECE — 룰이 서로를 가리지 않는가', () => {
       '2025-01-01',
       '2026-04-14', '2026-04-15', '2026-04-16',
       '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17',
+      '2026-10-31', '2026-11-01',
       '2027-01-01',
+      '2027-04-30', '2027-05-01',
     ];
     for (const card of CARDS) {
       if (!card.benefits.some(isCatchAll)) continue;
@@ -259,7 +263,7 @@ describe('가려진 룰은 화면에 뜨지 않는다', () => {
       card,
       transactions: [],
       appliedTier: card.performance.tiers[0],
-      month: '2026-12', // 프로모션 종료 후
+      month: '2027-05', // 두 번째 프로모션(2026-11-01 ~ 2027-04-30)까지 끝난 뒤
     });
     const ids = result.usage.map((u) => u.ruleId).sort();
     expect(ids).toEqual(['cw-coupang-base', 'cw-other-base']);

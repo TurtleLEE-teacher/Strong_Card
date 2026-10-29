@@ -400,10 +400,10 @@ describe('무실적 카드', () => {
 
     const after = computeBenefits({
       card: wow,
-      transactions: [tx({ title: '쿠팡', krwAmount: 100_000, approvedAt: '2026-11-01T01:00:00Z' })],
+      transactions: [tx({ title: '쿠팡', krwAmount: 100_000, approvedAt: '2026-10-20T01:00:00Z' })],
       appliedTier: tier,
     });
-    expect(after.totalUsed).toBe(2_000); // 2%
+    expect(after.totalUsed).toBe(2_000); // 2% (두 프로모션 사이 10-16 ~ 10-31은 기본 요율)
   });
 });
 
