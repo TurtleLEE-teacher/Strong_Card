@@ -99,6 +99,9 @@ function describeConditions(rule: BenefitRule): string[] {
 
   if (rule.bonusDay) out.push(`매월 ${rule.bonusDay.dayOfMonth}일 ${rule.bonusDay.multiplier}배`);
 
+  // 다른 적립 위에 얹히는 혜택이라는 사실. 모르면 둘 중 하나만 받는 줄 안다.
+  if (rule.stackable) out.push('다른 적립과 중복');
+
   if (rule.match.excludeKeywords?.length) {
     out.push(`제외: ${rule.match.excludeKeywords.join('·')}`);
   }
