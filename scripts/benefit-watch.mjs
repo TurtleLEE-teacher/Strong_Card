@@ -351,17 +351,17 @@ async function main() {
     `- 실행: ${now}${firstRun ? ' (첫 실행: 기준만 저장)' : ''}`,
     `- 비용: ${cost}`,
     `- 상한: 한 번에 ${wonText(BUDGET_USD)}, 수정안 ${MAX_PATCH}장`,
-    API_KEY ? '' : '- ANTHROPIC_API_KEY 없음: 바뀐 카드는 분석하지 않고 보류했다',
+    API_KEY ? null : '- ANTHROPIC_API_KEY 없음: 바뀐 카드는 분석하지 않고 보류했다',
     '',
     ...table,
-  ].filter((l) => l !== '');
+  ].filter((l) => l !== null);
   const detail = (x) => [
     '',
     `### ${x.card.cardId}`,
     `- 출처: [${x.fetched.label}](${x.fetched.url})`,
-    x.triage ? `- 분류: ${x.triage}` : '',
-    x.why ? `- 사람 확인 필요: ${x.why}` : '',
-    x.summary ? `\n${x.summary}` : '',
+    x.triage ? `- 분류: ${x.triage}` : null,
+    x.why ? `- 사람 확인 필요: ${x.why}` : null,
+    x.summary ? `\n${x.summary}` : null,
     '',
     '<details><summary>안내문에서 바뀐 줄</summary>',
     '',
@@ -369,7 +369,7 @@ async function main() {
     clip([...x.diff.removed.map((l) => `- ${l}`), ...x.diff.added.map((l) => `+ ${l}`)].join('\n'), 5000),
     '```',
     '</details>',
-  ].filter((l) => l !== '').join('\n');
+  ].filter((l) => l !== null).join('\n');
 
   const report = [...head, ...proposals.map(detail), ...attention.map(detail)].join('\n');
   writeFileSync(path.join(OUT_DIR, 'report.md'), report);
