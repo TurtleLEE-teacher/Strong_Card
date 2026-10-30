@@ -1,0 +1,143 @@
+name: Benefit Watch
+
+# 카드 혜택 월간 감시.
+#
+# 관리 중인 카드(src/config/benefit-watch.json, 설정 active: true)만 본다.
+# 안내문이 안 바뀌었으면 API 를 한 번도 부르지 않는다(0원). 바뀐 카드만
+# Claude API 로 분석해 설정 수정안 PR 을 연다. main 반영은 사람이 머지할 때다.
+#
+# 저장소 시크릿
+#   ANTHROPIC_API_KEY   (선택) 없으면 변경 감지만 하고 이슈로 알린다
+# 저장소 변수 (Settings > Secrets and variables > Actions > Variables, 모두 선택)
+#   BENEFIT_WATCH_BUDGET_USD   한 번 실행의 비용 상한 (기본 0.5달러)
+#   BENEFIT_WATCH_MAX_PATCH    한 번에 만들 수정안 수 (기본 2)
+#   BENEFIT_WATCH_TRIAGE_MODEL / BENEFIT_WATCH_PATCH_MODEL  모델 고정 (기본 최신 haiku / sonnet)
+#
+# 상태(지난달 안내문)는 이 워크플로 아티팩트로 이어받는다(90일 보관).
+# main 이나 다른 브랜치에 커밋하지 않으므로 배포가 생기지 않는다.
+
+on:
+  schedule:
+    # 매월 1일 KST 09:00 (= UTC 00:00)
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 이 카드만 확인 (카드 id, 쉼표로 여러 개. 비우면 관리 카드 전체)
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+
+concurrency:
+  group: benefit-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 지난 상태 불러오기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .benefit-watch
+          # 끝난 실행을 최신순으로 훑어 상태 아티팩트가 있는 첫 실행에서 받는다.
+          # (상태를 올린 뒤 PR 단계에서 실패한 실행도 상태는 유효하다. 그걸 못 받으면
+          #  같은 변경을 다시 분석해 두 번 과금된다.)
+          found=""
+          for id in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow benefit-watch.yml --limit 10 \
+              --json databaseId,status -q '.[] | select(.status=="completed") | .databaseId' 2>/dev/null); do
+            if gh run download "$id" --repo "$GITHUB_REPOSITORY" -n benefit-watch-state -D .benefit-watch >/dev/null 2>&1; then
+              found="$id"; echo "지난 상태: 실행 $id"; break
+            fi
+          done
+          [ -n "$found" ] || echo "::notice::지난 상태가 없다. 이번 실행은 기준만 저장한다(API 0원)."
+
+      - name: 혜택 안내 확인
+        id: watch
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BENEFIT_WATCH_ONLY: ${{ inputs.only }}
+          BENEFIT_WATCH_BUDGET_USD: ${{ vars.BENEFIT_WATCH_BUDGET_USD }}
+          BENEFIT_WATCH_MAX_PATCH: ${{ vars.BENEFIT_WATCH_MAX_PATCH }}
+          BENEFIT_WATCH_TRIAGE_MODEL: ${{ vars.BENEFIT_WATCH_TRIAGE_MODEL }}
+          BENEFIT_WATCH_PATCH_MODEL: ${{ vars.BENEFIT_WATCH_PATCH_MODEL }}
+        run: node scripts/benefit-watch.mjs
+
+      - name: 상태 저장
+        uses: actions/upload-artifact@v4
+        with:
+          name: benefit-watch-state
+          path: .benefit-watch/state.json
+          retention-days: 90
+          if-no-files-found: error
+
+      # 아래는 수정안이 있을 때만 돈다. GITHUB_TOKEN 으로 연 PR 에는 CI 가
+      # 자동으로 붙지 않으므로, 타입검사·테스트를 여기서 직접 돌려 결과를 PR 에 적는다.
+      - name: 수정안 검증 (타입·테스트)
+        id: verify
+        if: steps.watch.outputs.proposed == 'true'
+        run: |
+          npm ci
+          ok=true
+          npx tsc --noEmit > .benefit-watch/out/tsc.txt 2>&1 || ok=false
+          npm test > .benefit-watch/out/test.txt 2>&1 || ok=false
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+
+      - name: 수정안 PR 열기
+        if: steps.watch.outputs.proposed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFY_OK: ${{ steps.verify.outputs.ok }}
+        run: |
+          body=.benefit-watch/out/pr-body.md
+          {
+            echo ""
+            echo "## 자동 검증"
+            if [ "$VERIFY_OK" = "true" ]; then
+              echo "- 타입검사·테스트 통과"
+            else
+              echo "- 실패: 초안(draft)으로 연다. 머지 전에 고쳐야 한다."
+              echo '```'
+              tail -n 40 .benefit-watch/out/tsc.txt .benefit-watch/out/test.txt
+              echo '```'
+            fi
+          } >> "$body"
+          branch="benefit-watch/$(date -u +%Y%m%d-%H%M)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git add src/config/cards
+          git commit -m "chore(혜택 감시): $(cat .benefit-watch/out/pr-title.txt)"
+          git push origin "$branch"
+          gh label create benefit-watch --color FBCA04 --description '카드 혜택 월간 감시' --force >/dev/null 2>&1 || true
+          draft=""
+          [ "$VERIFY_OK" = "true" ] || draft="--draft"
+          gh pr create --base main --head "$branch" --title "$(cat .benefit-watch/out/pr-title.txt)" \
+            --body-file "$body" --label benefit-watch $draft
+
+      - name: 확인 필요 이슈
+        if: steps.watch.outputs.attention == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create benefit-watch --color FBCA04 --description '카드 혜택 월간 감시' --force >/dev/null 2>&1 || true
+          open=$(gh issue list --label benefit-watch --state open --json number -q '.[0].number' 2>/dev/null || true)
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body-file .benefit-watch/out/issue-body.md
+          else
+            gh issue create --title "$(cat .benefit-watch/out/issue-title.txt)" \
+              --body-file .benefit-watch/out/issue-body.md --label benefit-watch
+          fi
