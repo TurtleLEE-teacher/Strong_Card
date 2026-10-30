@@ -1,0 +1,49 @@
+{
+  "$comment": "카드 혜택 월간 감시 대상. 관리 중인 카드(active: true)만 넣는다. 카드를 추가·해지하면 여기도 같이 고친다 (config-consistency 테스트가 어긋나면 깨진다). sources는 위에서부터 시도하고, 처음 가져오기에 성공한 하나만 비교한다.",
+  "cards": [
+    {
+      "cardId": "kb-tantandaero",
+      "configFile": "kb-tantandaero.ts",
+      "sources": [
+        { "type": "cardgorilla", "label": "카드고릴라", "id": 150 },
+        { "type": "html", "label": "KB국민카드 상품 안내", "url": "https://m.kbcard.com/CXHIACRC0002.cms?allianceCode=09230&mainCC=b", "end": "카드 공통 안내사항" }
+      ]
+    },
+    {
+      "cardId": "kb-coupang-wow",
+      "configFile": "kb-coupang-wow.ts",
+      "sources": [
+        { "type": "cardgorilla", "label": "카드고릴라", "id": 2609 }
+      ]
+    },
+    {
+      "cardId": "samsung-amex-blue",
+      "configFile": "samsung-amex-blue.ts",
+      "sources": [
+        { "type": "cardgorilla", "label": "카드고릴라", "id": 45 }
+      ]
+    },
+    {
+      "cardId": "hyundai-zero-ed2",
+      "configFile": "hyundai-zero-ed2.ts",
+      "sources": [
+        { "type": "cardgorilla", "label": "카드고릴라", "id": 610 }
+      ]
+    },
+    {
+      "cardId": "shinhan-discount-plan",
+      "configFile": "shinhan-discount-plan.ts",
+      "sources": [
+        { "type": "html", "label": "신한카드 상품 안내", "url": "https://www.shinhancard.com/pconts/html/card/apply/credit/1232369_2207.html", "end": "카드 디자인" },
+        { "type": "cardgorilla", "label": "카드고릴라", "id": 2836 }
+      ]
+    },
+    {
+      "cardId": "shinhan-ev",
+      "configFile": "shinhan-ev.ts",
+      "sources": [
+        { "type": "html", "label": "신한카드 상품 안내", "url": "https://www.shinhancard.com/pconts/html/card/apply/credit/1188380_2207.html", "end": "카드 디자인" }
+      ]
+    }
+  ]
+}
