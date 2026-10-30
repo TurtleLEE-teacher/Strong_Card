@@ -84,19 +84,39 @@ async function fetchSource(src) {
   throw new Error(`모르는 출처 종류 ${src.type}`);
 }
 
+/**
+ * 잠깐 끊기는 연결은 다시 시도한다. 카드사 사이트는 해외(GitHub 러너)에서
+ * 가끔 연결을 끊는다(2026-10-30 신한카드 'fetch failed').
+ */
+async function withRetry(fn, tries = 3) {
+  let last;
+  for (let i = 0; i < tries; i += 1) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, 3000 * (i + 1)));
+    }
+  }
+  throw last;
+}
+
+const errText = (e) =>
+  e instanceof Error ? `${e.message}${e.cause?.code ? ` (${e.cause.code})` : ''}` : String(e);
+
 /** 위에서부터 시도해 처음 성공한 출처 하나. 혜택 단어가 하나도 없으면 실패로 본다(오류 페이지). */
 async function fetchFirst(sources) {
   const errors = [];
   for (const src of sources) {
     try {
-      const got = await fetchSource(src);
+      const got = await withRetry(() => fetchSource(src));
       const body = got.lines.join('\n');
       if (got.lines.length < 3 || !/적립|할인|캐시백|포인트|혜택/.test(body)) {
         throw new Error('혜택 문구가 없는 응답 (오류·차단 페이지로 봄)');
       }
       return { ...got, label: src.label, errors };
     } catch (e) {
-      errors.push(`${src.label}: ${e instanceof Error ? e.message : String(e)}`);
+      errors.push(`${src.label}: ${errText(e)}`);
     }
   }
   return { errors };
