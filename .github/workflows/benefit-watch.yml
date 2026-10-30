@@ -42,7 +42,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # 예약 실행은 GitHub 기본 브랜치(claude/card-benefits-tracker-atq3u0)에 있는 이 파일로 돈다.
+      # 기본 브랜치는 운영 코드가 아니므로, 카드 설정은 항상 main 에서 읽는다.
+      # (이 파일은 main 과 기본 브랜치에 같은 내용으로 둔다.)
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-node@v4
         with:
