@@ -77,3 +77,12 @@ describe('Amex Blue 쇼핑 1.5%는 쿠팡 결제에도 붙는다', () => {
     expect(ruleFor('samsung-amex-blue', '쿠팡이츠', 20_000)).toBe('ab-cvs-delivery');
   });
 });
+
+describe('메가커피 새 표기 메가MGC커피 (2026-11 신한 Discount Plan 안내문)', () => {
+  it.each(['메가MGC커피', '메가MGC커피 역삼점', '메가MGC커피(역삼', '메가엠지씨커피 강남점', '메가커피'])(
+    '%s → MEGA_COFFEE',
+    (name) => {
+      expect(resolveBrand(name)).toBe('MEGA_COFFEE');
+    },
+  );
+});
