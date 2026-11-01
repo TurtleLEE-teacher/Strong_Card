@@ -20,7 +20,8 @@ export const BRAND_ALIASES: Record<string, string[]> = {
   STARBUCKS: ['스타벅스', 'STARBUCKS', '스타벅스코리아'],
   EDIYA: ['이디야', '이디야커피', 'EDIYA'],
   TWOSOME: ['투썸플레이스', '투썸', 'TWOSOME'],
-  MEGA_COFFEE: ['메가엠지씨커피', '메가커피', 'MEGAMGC'],
+  // 2026-11 신한 Discount Plan 안내문부터 공식 표기가 '메가MGC커피'로 바뀌었다.
+  MEGA_COFFEE: ['메가엠지씨커피', '메가MGC커피', '메가MGC', '메가커피', 'MEGAMGC'],
   COMPOSE: ['컴포즈커피', '컴포즈'],
   PAIK_COFFEE: ['빽다방'],
   PAULBASSETT: ['폴바셋', 'PAULBASSETT'],
