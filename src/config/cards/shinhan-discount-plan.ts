@@ -57,6 +57,10 @@ import { COMMON_EXCLUSIONS } from '../exclusions';
  * 평상시 결과는 같지만(1만원 × 10% = 1,000원), Plan Day로 요율이
  * 2배가 되면 할인액 상한도 2배가 되어야 약관과 맞는다.
  *
+ * 미반영 조건: 약관의 할인 제외 대상에 "'신한카드 Discount Plan' 서비스 이외의
+ * 프로모션 할인이 적용된 거래"가 추가되었다. 거래에 다른 프로모션 할인이 붙었는지
+ * 알려 주는 필드가 없어 아직 룰에 반영하지 못했다(확인 필요).
+ *
  * 출처: 신한카드 공식 상품 안내 (사용자 제공 전문 + 2026-08 약관 재확인)
  * https://www.shinhancard.com/pconts/html/card/apply/credit/1232369_2207.html
  */
