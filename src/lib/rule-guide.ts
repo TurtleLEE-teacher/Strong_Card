@@ -106,6 +106,10 @@ function describeConditions(rule: BenefitRule): string[] {
     out.push(`제외: ${rule.match.excludeKeywords.join('·')}`);
   }
 
+  for (const { keyword, amounts } of rule.match.excludeKeywordAmounts ?? []) {
+    out.push(`제외: ${keyword} ${amounts.map(won).join('·')}`);
+  }
+
   return out;
 }
 
