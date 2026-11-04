@@ -115,6 +115,16 @@ export function matchesMerchant(rule: BenefitRule, tx: Transaction): boolean {
     }
   }
 
+  // 키워드 + 금액이 함께 맞을 때만 제외한다. 취소 거래는 금액이 음수라 절댓값으로 본다.
+  if (match.excludeKeywordAmounts?.length) {
+    const amount = Math.abs(tx.krwAmount);
+    for (const { keyword, amounts } of match.excludeKeywordAmounts) {
+      if (merchantText.includes(normalizeMerchant(keyword)) && amounts.includes(amount)) {
+        return false;
+      }
+    }
+  }
+
   // 조건이 하나도 없으면 catch-all 룰 (예: ZERO 전 가맹점 1%)
   if (!hasCondition) return true;
 
@@ -278,6 +288,7 @@ function sameMatcher(a: BenefitRule, b: BenefitRule): boolean {
       [...(r.match.categories ?? [])].sort(),
       [...(r.match.paymentKinds ?? [])].sort(),
       [...(r.match.excludeKeywords ?? [])].sort(),
+      r.match.excludeKeywordAmounts ?? null,
       r.timeWindow ?? null,
       [...(r.daysOfWeek ?? [])].sort(),
       r.minAmountPerTx ?? null,
