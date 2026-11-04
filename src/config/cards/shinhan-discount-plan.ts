@@ -279,7 +279,25 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       label: '온라인쇼핑 10%',
       type: 'discount',
       rate: 0.1,
-      match: { brands: [...BRAND_GROUPS.DP_ONLINE] },
+      // 네플스는 결제 방식에 따라 문자 가맹점명이 다르다 (2026-11-02 실측).
+      //   카드 간편결제(네이버페이) → '네이버페이'         → 할인 없음
+      //   일반결제 > 신용카드       → '네이버파이낸셜(주)' → 할인
+      //                              (11/2 56,610원, 11/5 신한 결제예정금액에서 확인)
+      // 약관이 가맹점명이 간편결제명(네이버페이 등)인 거래를 빼기 때문이다.
+      //
+      // '네이버파이낸셜'은 브랜드 사전에서 NAVERPAY로 잡혀 Amex Blue 간편결제
+      // 적립에 쓰인다. 사전을 바꾸면 그쪽 판정이 같이 바뀌므로 사전은 그대로 두고
+      // 이 룰에만 키워드로 붙인다.
+      //
+      // 같은 이름으로 찍히는 네이버플러스 멤버십 요금(4,900원 · 46,800원)은 금액으로 뺀다.
+      // 멤버십은 온라인쇼핑 영역 제외 대상이다.
+      // 미반영: 네이버 예약 일반결제도 같은 이름으로 찍힐 수 있는데 문자로는 못 가른다.
+      // 2026-07~11 문자에서 '네이버파이낸셜'은 이 한 건뿐이라 드물다고 봤다.
+      match: {
+        brands: [...BRAND_GROUPS.DP_ONLINE],
+        keywords: ['네이버파이낸셜'],
+        excludeKeywordAmounts: [{ keyword: '네이버파이낸셜', amounts: [4_900, 46_800] }],
+      },
       maxEligibleAmountPerTx: 50_000,
       bonusDay: PLAN_DAY,
       capPerMonth: DAILY_PLAN_CAP,
@@ -289,7 +307,7 @@ export const SHINHAN_DISCOUNT_PLAN: Card = {
       maxCountPerMonth: 5,
       priority: 20,
       confidence: 'confirmed',
-      notes: '멤버십·구독료, 쿠팡이츠는 제외',
+      notes: '멤버십·구독료, 쿠팡이츠는 제외. 네플스는 일반결제만 (네이버페이 간편결제는 제외)',
     },
     {
       id: 'dp-daily-goods',
