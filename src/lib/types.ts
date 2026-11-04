@@ -185,6 +185,15 @@ export interface MerchantMatcher {
   keywords?: string[];
   /** 위 조건에 걸려도 이건 제외 */
   excludeKeywords?: string[];
+  /**
+   * 이 키워드가 든 가맹점에서 **이 금액일 때만** 제외한다.
+   *
+   * 가맹점명만으로는 못 가르는 결제를 금액으로 가른다. 네플스 일반결제와
+   * 네이버플러스 멤버십 요금은 문자에 똑같이 '네이버파이낸셜(주)'로 찍힌다.
+   * 멤버십은 4,900원 · 46,800원으로 정해져 있어 금액이 유일한 단서다.
+   * 키워드에 묶어 두므로 같은 룰의 다른 가맹점(쿠팡 4,900원 등)은 그대로 받는다.
+   */
+  excludeKeywordAmounts?: { keyword: string; amounts: number[] }[];
 }
 
 /**
