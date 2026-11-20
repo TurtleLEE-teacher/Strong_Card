@@ -5,6 +5,7 @@ import { filterTransactions } from '@/lib/engine/snapshot';
 import { benefitsByTransaction } from '@/lib/engine/benefits';
 import { buildLiveSnapshots } from '@/lib/live-snapshots';
 import { judgeTransaction } from '@/lib/engine/performance';
+import { fetchLiveRates } from '@/lib/fx';
 import { currentMonthKey, isFutureMonth, isMonthKey } from '@/lib/date';
 import { assertCronAuthorized } from '@/lib/cron';
 import { buildBenefitAlert } from '@/lib/alerts/rules';
@@ -67,7 +68,11 @@ export async function POST(request: Request) {
       errors.push(`ensure-brand-property: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    const transactions = await fetchTransactionsForMonth(month);
+    // 해외결제 원화 환산은 그날 기준환율로 한다. 원화금액이 이미 적힌 행은
+    // 그대로 믿으므로, 승인 뒤 첫 동기화 때의 환율이 그 거래에 남는다.
+    // 조회가 실패하면 rates가 비어 폴백 환율(fx.ts)로 내려간다.
+    const fx = await fetchLiveRates();
+    const transactions = await fetchTransactionsForMonth(month, { rates: fx.rates });
     // 화면과 같은 입구. 예전에 여기서 수동 전월실적을 빼먹어 8월 한 달
     // 내내 혜택을 0원으로 써 버렸다 (live-snapshots.ts 주석 참고).
     const snapshots = buildLiveSnapshots(transactions, month);
@@ -149,6 +154,7 @@ export async function POST(request: Request) {
       ok: errors.length === 0,
       month,
       backfill,
+      fx,
       transactions: transactions.length,
       updated,
       notified,
